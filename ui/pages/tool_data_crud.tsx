@@ -18,7 +18,7 @@ import {
   LibraryBig,
 } from "lucide-react"
 
-import { NavLink,useLocation } from 'react-router-dom';
+//import { NavLink } from 'react-router-dom';
 
 import { useState, useEffect, useRef} from 'react';
 
@@ -29,11 +29,15 @@ import { overloadBlueprint, Blueprint } from '@/lib/tank_utils';
 
 interface ToolDataCRUDProps {
   readonly: boolean;
+  portfolio: string;
+  org: string;
+  tool: string;
+  ring: string;
 }
 
-export default function ToolDataCRUD({ readonly }: ToolDataCRUDProps) {
+export default function ToolDataCRUD({ readonly, portfolio, org, tool, ring }: ToolDataCRUDProps) {
 
-    const location = useLocation();
+
     const isInitialMount = useRef(true);
 
     const [blueprint, setBlueprint] = useState<Blueprint>({ label: '' });
@@ -42,10 +46,11 @@ export default function ToolDataCRUD({ readonly }: ToolDataCRUDProps) {
     const [refresh, setRefresh] = useState(false);
     const [error, setError] = useState<Error | null>(null);
 
-    const portfolio_id = location.pathname.split('/')[1]
-    const org_id = location.pathname.split('/')[2] 
-    //const app_id = location.pathname.split('/')[3]
-    const ring_id = location.pathname.split('/')[4]
+
+    console.log('TDC>Portfolio:',portfolio)
+    console.log('TDC>Org:',org)
+    console.log('TDC>Tool:',tool)
+    console.log('TDC>Ring:',ring)
 
 
     //console.log('BLUEPRINT 000');
@@ -56,7 +61,7 @@ export default function ToolDataCRUD({ readonly }: ToolDataCRUDProps) {
         const fetchBlueprint = async () => {
           try {
             // Fetch Blueprint
-            const blueprintResponse = await fetch(`${import.meta.env.VITE_API_URL}/_blueprint/irma/${ring_id}`, {
+            const blueprintResponse = await fetch(`${import.meta.env.VITE_API_URL}/_blueprint/irma/${ring}`, {
               method: 'GET',
               headers: {
                 'Authorization': `Bearer ${sessionStorage.accessToken}`,
@@ -68,7 +73,7 @@ export default function ToolDataCRUD({ readonly }: ToolDataCRUDProps) {
             setRefresh(prev => !prev);
     
             // After fetching blueprint, run overloadBlueprint
-            const updatedBlueprint = await overloadBlueprint(blueprintData, portfolio_id, org_id);
+            const updatedBlueprint = await overloadBlueprint(blueprintData, portfolio, org);
             if (updatedBlueprint) {
                 setBlueprint(updatedBlueprint);
             }
@@ -85,7 +90,7 @@ export default function ToolDataCRUD({ readonly }: ToolDataCRUDProps) {
         
         fetchBlueprint();
         
-    }, [location]);
+    }, [ring]);
 
 
 
@@ -95,7 +100,7 @@ export default function ToolDataCRUD({ readonly }: ToolDataCRUDProps) {
           try {
 
             // Delete Request 
-            const dataResponse = await fetch(`${import.meta.env.VITE_API_URL}/_data/${portfolio_id}/${org_id}/${ring_id}/${deletedId}`, {
+            const dataResponse = await fetch(`${import.meta.env.VITE_API_URL}/_data/${portfolio}/${org}/${ring}/${deletedId}`, {
               method: 'DELETE',
               headers: {
                 'Authorization': `Bearer ${sessionStorage.accessToken}`,
@@ -166,8 +171,8 @@ export default function ToolDataCRUD({ readonly }: ToolDataCRUDProps) {
 
                 <nav className="ml-auto flex items-center gap-2 hidden">
                   
-                  <NavLink
-                    to={`/${portfolio_id}/${org_id}/data`}
+                  <a
+                    href={`/${portfolio}/${org}/data`}
                     className={({ isActive }) => (isActive ? "h-8 gap-1" : "h-8 gap-1")}
                     style={{ textDecoration: 'none' }} // Ensure no default link styling
                   >
@@ -179,7 +184,7 @@ export default function ToolDataCRUD({ readonly }: ToolDataCRUDProps) {
                         </span>
                       </Button>
                     )}
-                  </NavLink>
+                  </a>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" size="sm" className="h-8 gap-1">
@@ -188,11 +193,11 @@ export default function ToolDataCRUD({ readonly }: ToolDataCRUDProps) {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuCheckboxItem checked>
-                        <NavLink
-                          to={`/${portfolio_id}/${org_id}/data`}
+                        <a
+                          href={`/${portfolio}/${org}/data`}
                         >
                         Dashboard
-                        </NavLink>           
+                        </a>           
                       </DropdownMenuCheckboxItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -216,7 +221,7 @@ export default function ToolDataCRUD({ readonly }: ToolDataCRUDProps) {
                                   blueprint={blueprint}
                                   title={`Creating new ${blueprint.label}`}
                                   instructions="Enter the information you have now. You can add to it later."
-                                  path={`${import.meta.env.VITE_API_URL}/_data/${portfolio_id}/${org_id}/${ring_id}`}
+                                  path={`${import.meta.env.VITE_API_URL}/_data/${portfolio}/${org}/${ring}`}
                                   method='POST'
                               />
                           )}
@@ -235,6 +240,10 @@ export default function ToolDataCRUD({ readonly }: ToolDataCRUDProps) {
                           onSelectId={handleSelectId}                        
                           refresh={refresh}
                           blueprint={blueprint}
+                          portfolio={portfolio} 
+                          org={org} 
+                          tool={tool} 
+                          ring={ring}
                       >
                       </DataTable>
                       </CardContent>   
@@ -249,9 +258,9 @@ export default function ToolDataCRUD({ readonly }: ToolDataCRUDProps) {
                    refreshUp={refreshAction}
                    onDeleteId={handleDeleteId}
                    blueprint={blueprint}
-                   portfolio_id={portfolio_id}
-                   org_id={org_id}
-                   ring_id={ring_id}
+                   portfolio={portfolio}
+                   org={org}
+                   ring={ring}
                 /> 
             </div>
         </main>

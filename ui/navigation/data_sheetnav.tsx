@@ -7,25 +7,29 @@ import {
 import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
-import { NavLink } from 'react-router-dom'
 import { useState } from 'react';
+import { useWindowSize } from '@/contexts/WindowSizeContext';
+
 
 interface ToolMenuProps {
     portfolio: string;
     org: string;
+    tool: string;
+    ring: string;
 }
 
 
-export default function ToolDataSheetNav({portfolio,org}:ToolMenuProps) {  
+export default function ToolDataSheetNav({portfolio,org,tool,ring}:ToolMenuProps) {  
     
     const [open, setOpen] = useState(false);
+    const { width } = useWindowSize();
        
     return ( 
 
         <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button size="icon" variant="outline" className="sm:hidden">
-                <EllipsisVertical className="h-5 w-5" />
+              <Button size="icon" variant="outline" className="block sm:hidden">
+                <EllipsisVertical className="h-5 w-5" />{width}
                 <span className="sr-only">Toggle Menu</span>
               </Button>
             </SheetTrigger>
@@ -37,8 +41,8 @@ export default function ToolDataSheetNav({portfolio,org}:ToolMenuProps) {
         
             <nav className="grid gap-6 text-lg font-medium">
 
-                <NavLink
-                    to={`/home`}
+                <a
+                    href={`/home`}
                     onClick={() => {
                         setOpen(false);
                     }}
@@ -47,9 +51,9 @@ export default function ToolDataSheetNav({portfolio,org}:ToolMenuProps) {
                     
                     <img src={`${import.meta.env.VITE_WL_LOGO}`} className="ml-auto h-12 w-12" alt="Logo" />
                     <span className="sr-only">Logo</span>
-                </NavLink> 
-                <NavLink
-                    to={`/${portfolio}/${org}/data`}
+                </a> 
+                <a
+                    href={`/${portfolio}/${org}/data`}
                     onClick={() => {
                         setOpen(false);
                     }}
@@ -57,7 +61,7 @@ export default function ToolDataSheetNav({portfolio,org}:ToolMenuProps) {
                 >
                     <Database className="h-5 w-5" />
                     Data
-                </NavLink>
+                </a>
                 
                 <span className="relative">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
