@@ -14,12 +14,13 @@ import { useWindowSize } from '@/contexts/WindowSizeContext';
 interface ToolMenuProps {
     portfolio: string;
     org: string;
-    tool: string;
-    ring: string;
+    tool?: string;
+    ring?: string;
+    onNavigate: (path: string) => void;
 }
 
 
-export default function ToolDataSheetNav({portfolio,org,tool,ring}:ToolMenuProps) {  
+export default function ToolDataSheetNav({portfolio,org,tool,ring,onNavigate}:ToolMenuProps) {  
     
     const [open, setOpen] = useState(false);
     const { width } = useWindowSize();
@@ -40,30 +41,29 @@ export default function ToolDataSheetNav({portfolio,org,tool,ring}:ToolMenuProps
         
         
             <nav className="grid gap-6 text-lg font-medium">
-
-                <a
-                    href={`/home`}
+                <button
                     onClick={() => {
                         setOpen(false);
+                        onNavigate(`/home`);
                     }}
                     className="group flex h-11 w-11 shrink-0 items-center justify-center gap-2  md:h-8 md:w-8 md:text-base"     
                 > 
                     
                     <img src={`${import.meta.env.VITE_WL_LOGO}`} className="ml-auto h-12 w-12" alt="Logo" />
                     <span className="sr-only">Logo</span>
-                </a> 
-                <a
-                    href={`/${portfolio}/${org}/data`}
+                </button> 
+                <button
                     onClick={() => {
                         setOpen(false);
+                        onNavigate(`/${portfolio}/${org}/data`);
                     }}
                     className="flex items-center gap-4 px-2.5 text-foreground"
                 >
                     <Database className="h-5 w-5" />
                     Data
-                </a>
+                </button>
                 
-                <span className="relative">
+                <span className="relative hidden">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                     type="search"
