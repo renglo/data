@@ -230,12 +230,11 @@ export default function ToolDataCRUD({ readonly, portfolio, org, tool, ring }: T
                 </div>
 
              
-                <div>
-                  <Card>
+                <div className="h-[calc(100vh-18rem)]">
+                  <Card className="h-full">
                       <CardHeader className="px-0">
-
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="h-[calc(100%-4rem)] overflow-auto">
                       <DataTable 
                           onSelectId={handleSelectId}                        
                           refresh={refresh}

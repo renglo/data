@@ -2,11 +2,30 @@ import ToolDataCRUD from "../../../tools/data/ui/pages/tool_data_crud"
 import ToolDataDashboard from "../../../tools/data/ui/pages/tool_data_dashboard";
 
 
-export default function Data({ portfolio, org, tool, ring }: {
+interface Portfolio {
+  name: string;
+  portfolio_id: string;
+  orgs: Record<string, Org>;
+  tools: Record<string, Tool>;
+}
+
+interface Org {
+  name: string;
+  org_id: string;
+  tools: string[];
+}
+
+interface Tool {
+  name: string;
+  handle: string;
+}
+
+export default function Data({ portfolio, org, tool, ring, tree }: {
     portfolio: string;
     org: string;
     tool: string;
     ring?: string;  // optional prop since it might be undefined
+    tree?: { portfolios: Record<string, Portfolio> };
 }) {
 
 
