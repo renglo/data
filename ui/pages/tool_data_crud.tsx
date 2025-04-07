@@ -251,7 +251,7 @@ export default function ToolDataCRUD({ readonly, portfolio, org, tool, ring }: T
                   
                 
             </div>
-            <div className="sticky top-5">
+            <div className="sticky top-5 h-[calc(100vh-5rem-20px)] overflow-y-auto">
                 <ItemPreview 
                    selectedId={selectedId} 
                    refreshUp={refreshAction}
