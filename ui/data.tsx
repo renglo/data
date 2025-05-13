@@ -20,26 +20,26 @@ interface Tool {
   handle: string;
 }
 
-export default function Data({ portfolio, org, tool, ring, tree }: {
+export default function Data({ portfolio, org, tool, section, tree }: {
     portfolio: string;
     org: string;
     tool: string;
-    ring?: string;  // optional prop since it might be undefined
+    section?: string;  // optional prop since it might be undefined
     tree?: { portfolios: Record<string, Portfolio> };
 }) {
 
 
-    console.log('Data > Ring:',ring)
+    console.log('Data > Ring:',section)
 
     return (
         <div className="flex min-h-screen w-full flex-col bg-muted/40">
         
           <div className="flex flex-col sm:gap-2 sm:pl-2">
   
-            {ring === undefined ? ( 
+            {section === undefined ? ( 
               <ToolDataDashboard />
               ):(
-              <ToolDataCRUD readonly={false} portfolio={portfolio} org={org} tool={tool} ring={ring}
+              <ToolDataCRUD readonly={false} portfolio={portfolio} org={org} tool={tool} ring={section}
               />
               )} 
           
