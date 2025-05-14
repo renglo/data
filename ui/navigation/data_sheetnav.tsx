@@ -15,12 +15,12 @@ interface ToolMenuProps {
     portfolio: string;
     org: string;
     tool?: string;
-    ring?: string;
+    section?: string;
     onNavigate: (path: string) => void;
 }
 
 
-export default function ToolDataSheetNav({portfolio,org,tool,ring,onNavigate}:ToolMenuProps) {  
+export default function ToolDataSheetNav({portfolio,org,tool,section,onNavigate}:ToolMenuProps) {  
     
     const [open, setOpen] = useState(false);
     const { width } = useWindowSize();
