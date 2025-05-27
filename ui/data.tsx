@@ -29,7 +29,7 @@ export default function Data({ portfolio, org, tool, section, tree }: {
 }) {
 
 
-    console.log('Data > Section:',section)
+    console.log('Data > Ring:',ring)
 
     return (
         <div className="flex min-h-screen w-full flex-col bg-muted/40">

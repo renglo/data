@@ -16,12 +16,12 @@ interface ToolMenuProps {
     portfolio: string;
     org: string;
     tool?: string;
-    ring?: string;
+    section?: string;
     onNavigate: (path: string) => void;
 }
 
 
-export default function ToolDataSideNav({portfolio,org,tool,ring,onNavigate}:ToolMenuProps) {    
+export default function ToolDataSideNav({portfolio,org,tool,section,onNavigate}:ToolMenuProps) {    
        
       return ( 
         
