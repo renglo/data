@@ -20,11 +20,11 @@ import {
 } from "@/components/ui/chart"
 import { Separator } from "@/components/ui/separator"
 
-import GraphTimeseries2 from "@/components/tank/graph-timeseries2"
-import GraphBarchart from "@/components/tank/graph-barchart"
-import GraphComparisonBar from "@/components/tank/graph-comparisonbar"
-import GraphRadial from "@/components/tank/graph-radial"
-import GraphWave from "@/components/tank/graph-wave"
+import GraphTimeseries2 from "@/components/console/graph-timeseries2"
+import GraphBarchart from "@/components/console/graph-barchart"
+import GraphComparisonBar from "@/components/console/graph-comparisonbar"
+import GraphRadial from "@/components/console/graph-radial"
+import GraphWave from "@/components/console/graph-wave"
 
 export default function ToolDataDashboard() {
   return (

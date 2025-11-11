@@ -1,5 +1,5 @@
-import ToolDataCRUD from "../../../tools/data/ui/pages/tool_data_crud"
-import ToolDataDashboard from "../../../tools/data/ui/pages/tool_data_dashboard";
+import ToolDataCRUD from "@extensions/data/ui/pages/tool_data_crud"
+import ToolDataDashboard from "@extensions/data/ui/pages/tool_data_dashboard";
 
 
 interface Portfolio {

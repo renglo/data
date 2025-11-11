@@ -22,10 +22,10 @@ import {
 
 import { useState, useEffect, useRef} from 'react';
 
-import DataTable from "@/components/tank/data-table"
-import ItemPreview from "@/components/tank/item-preview"
-import DialogPost from "@/components/tank/dialog-post"
-import { overloadBlueprint, Blueprint } from '@/lib/tank_utils';
+import DataTable from "@/components/console/data-table"
+import ItemPreview from "@/components/console/item-preview"
+import DialogPost from "@/components/console/dialog-post"
+import { overloadBlueprint, Blueprint } from '@/lib/console_utils';
 
 interface ToolDataCRUDProps {
   readonly: boolean;
