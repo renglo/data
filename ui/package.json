@@ -1,0 +1,19 @@
+{
+  "name": "@renglo/data",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "../data.tsx",
+  "exports": {
+    ".": "../data.tsx",
+    "./ui/*": "./*",
+    "./ui/navigation/*": "./navigation/*"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "lucide-react": "^0.426.0"
+  }
+}
+
