@@ -1,5 +1,7 @@
-import ToolDataCRUD from "@renglo/data/pages/tool_data_crud"
-import ToolDataDashboard from "@renglo/data/pages/tool_data_dashboard";
+import React from "react";
+import ToolDataDashboard from "./pages/tool_data_dashboard";
+import ToolDataTmpArtifact from "./pages/tool_data_tmp_artifact";
+import DataExplorer from "./pages/data_explorer";
 
 
 interface Portfolio {
@@ -20,28 +22,36 @@ interface Tool {
   handle: string;
 }
 
-export default function Data({ portfolio, org, tool, section, tree }: {
+export default function Data({ portfolio, org, tool, section, tree, p1 }: {
     portfolio: string;
     org: string;
     tool: string;
     section?: string;  // optional prop since it might be undefined
     tree?: { portfolios: Record<string, Portfolio> };
+    p1?: string;
 }) {
 
 
-    console.log('Data > Ring:',section)
+    console.log('Data > Section/P1:',section, p1)
+
+    const initialRing = (p1 || "").trim();
 
     return (
         <div className="flex min-h-screen w-full flex-col bg-muted/40">
         
           <div className="flex flex-col sm:gap-2 sm:pl-2">
   
-            {section === undefined ? ( 
+            {section === undefined ? (
               <ToolDataDashboard />
-              ):(
-              <ToolDataCRUD readonly={false} portfolio={portfolio} org={org} tool={tool} ring={section}
+              ) : section === "tmp_artifact" ? (
+              <ToolDataTmpArtifact portfolio={portfolio} org={org} />
+              ) : section === "explorer" ? (
+              <DataExplorer readonly={false} portfolio={portfolio} org={org} tool={tool} initialRing={initialRing}
               />
-              )} 
+              ) : (
+              <ToolDataDashboard />
+              )
+              }
           
           </div>
         </div>
