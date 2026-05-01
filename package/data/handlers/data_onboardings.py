@@ -17,7 +17,7 @@ It should be executed only once and there should be protection in place in case 
 Nnothing should happen if it is run multiple times.
 '''
 
-class SchdOnboardings:
+class DataOnboardings:
     def __init__(self):
         # Load config for handlers (independent of Flask)
         config = load_config()
@@ -294,7 +294,7 @@ class SchdOnboardings:
         all_successful = True
         
         for job in jobs:
-            response, status = self.DAC.post_a_b(portfolio, org, 'schd_jobs', job)
+            response, status = self.DAC.post_a_b(portfolio, org, 'data_jobs', job)
             responses.append(response)
             if not response['success']:
                 all_successful = False
@@ -452,7 +452,7 @@ class SchdOnboardings:
         # Step 5: Create a tool
         # Step 5b: Add the tool to the portfolio
         # OUTPUT: self.bridge['tool']
-        response_5 = self.create_tool(existing_portfolio,'Schd','schd')
+        response_5 = self.create_tool(existing_portfolio,'Data','data')
         results.append(response_5)
         if not response_5['success']: return {'success':False,'output':results}
         
@@ -501,10 +501,10 @@ class SchdOnboardings:
         # Step 9: Create the job documents       
         jobs = [{
                 "description": "This job is called to execute periodic operational tasks",
-                "handler": "schd/heartbeat",
+                "handler": "data/heartbeat",
                 "name": "Heartbeat",
                 "status": "available",
-                "type": "schd",
+                "type": "data",
                 "version": "1.0.0"
             }]
     
@@ -515,7 +515,7 @@ class SchdOnboardings:
     
         '''
         # Step 10: Create the config singleton document
-        response_10 = self.create_config_doc(self.bridge['portfolio_id'], self.bridge['org_id'],payload,'schd_config')
+        response_10 = self.create_config_doc(self.bridge['portfolio_id'], self.bridge['org_id'],payload,'data_config')
         results.append(response_10)
         if not response_10['success']: return {'success':False,'output':results}
         '''

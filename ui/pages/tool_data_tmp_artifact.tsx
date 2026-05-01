@@ -117,7 +117,7 @@ export default function ToolDataTmpArtifact({
           <CardTitle>Tmp Artifact Resolver</CardTitle>
           <CardDescription>
             Resolve a `tmp_artifact` key via `_docs` and inspect the payload.
-            Current workspace: {portfolio}/{org}
+            Current location: {portfolio}/{org}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
