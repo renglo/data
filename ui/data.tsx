@@ -2,6 +2,7 @@ import React from "react";
 import ToolDataDashboard from "./pages/tool_data_dashboard";
 import ToolDataTmpArtifact from "./pages/tool_data_tmp_artifact";
 import DataExplorer from "./pages/data_explorer";
+import ChatInspect from "./pages/chat_inspect"
 
 
 interface Portfolio {
@@ -22,12 +23,14 @@ interface Tool {
   handle: string;
 }
 
-export default function Data({ portfolio, org, tool, section, tree, p1 }: {
+export default function Data({ portfolio, org, tool, section, tree, query, onNavigate, p1 }: {
     portfolio: string;
     org: string;
     tool: string;
     section?: string;  // optional prop since it might be undefined
     tree?: { portfolios: Record<string, Portfolio> };
+    query?: Record<string, string>; // query args in the url (if any)
+    onNavigate?: (path: string) => void;
     p1?: string;
 }) {
 
@@ -49,6 +52,8 @@ export default function Data({ portfolio, org, tool, section, tree, p1 }: {
               ) : section === "explorer" ? (
               <DataExplorer readonly={false} portfolio={portfolio} org={org} tool={tool} initialRing={initialRing}
               />
+              ) : section === "inspect" ? (
+              <ChatInspect portfolio={portfolio} org={org} tool={tool} tree={tree} onNavigate={onNavigate} query={query} />
               ) : section === "dashboard" ? (
               <ToolDataDashboard />
               ) : null
