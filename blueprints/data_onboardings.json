@@ -1,0 +1,33 @@
+{
+    "_id": "5e834ed5-d532-4852-a20f-123baba7812922",
+    "added": "",
+    "blueprint_origin": "",
+    "description": "Onboarding for Data extension",
+    "fields": [
+        {
+            "cardinality": "single",
+            "default": "",
+            "hint": "Portfolio this extension should belong to:",
+            "label": "Portfolio",
+            "layer": "2",
+            "multilingual": false,
+            "name": "portfolio",
+            "order": "2",
+            "required": false,
+            "semantic": "hs:portfolio",
+            "source": "",
+            "type": "string",
+            "widget": "text"
+        }
+      ],
+      "handle": "irma",
+      "irn": "irn:blueprint:irma:data_onboardings",
+      "label": "Data Onboardings",
+      "license": "CC BY",
+      "name": "data_onboardings",
+      "public": true,
+      "singleton": false,
+      "status": "final",
+      "uri": "https://helloirma.com/_blueprint/irma/data_onboardings/1.0.1",
+      "version": "0.0.1"
+  }

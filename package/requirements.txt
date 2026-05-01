@@ -1,0 +1,7 @@
+# Data Handlers Requirements
+
+# Core dependencies
+flask>=3.0.0
+
+# Internal library dependency (required for runtime integration)
+# Install project dependencies that provide the `renglo` modules in your environment.
