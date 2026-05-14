@@ -3,6 +3,7 @@ import {
   Ghost,
   Telescope,
   Microscope,
+  Orbit,
 } from "lucide-react"
 
 import {
@@ -123,6 +124,29 @@ export default function ToolDataSideNav({portfolio,org,tool,section,onNavigate}:
             </div>
           </TooltipTrigger>
           <TooltipContent side="right">Inspect</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      <TooltipProvider>
+        <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center flex-col">
+                <button
+                onClick={() => onNavigate(`/${portfolio}/${org}/data/graph`)}
+                className={
+                  section === 'graph'
+                    ? 'group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full bg-gray-200 text-lg font-semibold text-muted-foreground md:h-12 md:w-12 md:text-base'
+                    : 'flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8'
+                }
+                >
+                  <Orbit className="h-5 w-5" />
+                  <span className="sr-only">Graph</span>
+                </button>
+
+                <span className="text-xxs ">Graph</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="right">Graph</TooltipContent>
         </Tooltip>
       </TooltipProvider>
 
