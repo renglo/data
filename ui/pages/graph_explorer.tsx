@@ -14,12 +14,23 @@ interface GraphExplorerProps {
   org: string;
 }
 
+interface EdgeAlias {
+  outgoing?: string;
+  incoming?: string;
+}
+
+interface EdgeDefinition {
+  edgeType: string;
+  outgoingAlias?: string;
+  incomingAlias?: string;
+}
+
 export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
   const [activeTab, setActiveTab] = useState<"node" | "type" | "traverse">("node");
   const [nodeRing, setNodeRing] = useState("");
   const [nodeDocId, setNodeDocId] = useState("");
   const [nodeLimit, setNodeLimit] = useState("100");
-  const [inferredNodeEdgeTypes, setInferredNodeEdgeTypes] = useState<string[]>([]);
+  const [inferredNodeEdgeTypes, setInferredNodeEdgeTypes] = useState<EdgeDefinition[]>([]);
 
   const [typeEdgeType, setTypeEdgeType] = useState("");
   const [typeLimit, setTypeLimit] = useState("100");
@@ -28,7 +39,8 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
   const [traverseId, setTraverseId] = useState("");
   const [direction, setDirection] = useState("forward");
   const [maxDepth, setMaxDepth] = useState("3");
-  const [inferredTraverseEdgeTypes, setInferredTraverseEdgeTypes] = useState<string[]>([]);
+  const [inferredTraverseEdgeTypes, setInferredTraverseEdgeTypes] = useState<EdgeDefinition[]>([]);
+  const [edgeAliasMap, setEdgeAliasMap] = useState<Record<string, EdgeAlias>>({});
 
   const [loadingKey, setLoadingKey] = useState<"" | "node" | "type" | "traverse">("");
   const [response, setResponse] = useState<unknown>(null);
@@ -59,7 +71,79 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
     if (!res.ok) {
       throw new Error(body?.message || `Request failed (${res.status})`);
     }
-    setResponse(body);
+    return body;
+  };
+
+  const buildAliasMap = (definitions: EdgeDefinition[]) => {
+    const nextMap: Record<string, EdgeAlias> = {};
+    for (const definition of definitions) {
+      nextMap[definition.edgeType] = {
+        outgoing: definition.outgoingAlias,
+        incoming: definition.incomingAlias,
+      };
+    }
+    return nextMap;
+  };
+
+  const resolveAlias = (
+    edgeType: string,
+    aliasMap: Record<string, EdgeAlias>,
+    perspective: "outgoing" | "incoming",
+  ) => {
+    const aliases = aliasMap[edgeType];
+    if (!aliases) return edgeType;
+    if (perspective === "outgoing") {
+      return aliases.outgoing || edgeType;
+    }
+    return aliases.incoming || edgeType;
+  };
+
+  const applyAliasesToGraphResponse = (
+    graphResponse: any,
+    aliasMap: Record<string, EdgeAlias>,
+  ) => {
+    if (!graphResponse || typeof graphResponse !== "object") {
+      return graphResponse;
+    }
+    const result = { ...graphResponse };
+
+    if (Array.isArray(result.outgoing)) {
+      result.outgoing = result.outgoing.map((edge: any) => ({
+        ...edge,
+        edge_label: resolveAlias(String(edge?.edge_type || ""), aliasMap, "outgoing"),
+      }));
+    }
+
+    if (Array.isArray(result.incoming)) {
+      result.incoming = result.incoming.map((edge: any) => ({
+        ...edge,
+        edge_label: resolveAlias(String(edge?.edge_type || ""), aliasMap, "incoming"),
+      }));
+    }
+
+    if (Array.isArray(result.items)) {
+      result.items = result.items.map((edge: any) => ({
+        ...edge,
+        edge_label_outgoing: resolveAlias(String(edge?.edge_type || ""), aliasMap, "outgoing"),
+        edge_label_incoming: resolveAlias(String(edge?.edge_type || ""), aliasMap, "incoming"),
+      }));
+    }
+
+    if (Array.isArray(result.steps)) {
+      const perspective = result.direction === "backward" ? "incoming" : "outgoing";
+      result.steps = result.steps.map((step: any) => {
+        const edgeType = String(step?.edge?.edge_type || "");
+        return {
+          ...step,
+          edge: {
+            ...step?.edge,
+            edge_label: resolveAlias(edgeType, aliasMap, perspective),
+          },
+        };
+      });
+    }
+
+    return result;
   };
 
   const runNodeEdges = async () => {
@@ -71,17 +155,17 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
         throw new Error("ring and id are required.");
       }
       const node = `${ring}/${idx}`;
-      const inferred = await inferEdgeTypesFromBlueprint(ring);
+      const inferred = await inferEdgeDefinitionsFromBlueprint(ring);
       setInferredNodeEdgeTypes(inferred);
-      if (inferred.length === 0) {
-        throw new Error(`No edge definitions found in blueprint for ring '${ring}'.`);
-      }
+      const aliasMap = buildAliasMap(inferred);
+      setEdgeAliasMap(aliasMap);
 
-      await callGraph("node-edges", {
+      const body = await callGraph("node-edges", {
         node_id: node,
-        edge_types: inferred,
+        edge_types: inferred.map((item) => item.edgeType),
         limit: Number(nodeLimit) || 100,
       });
+      setResponse(applyAliasesToGraphResponse(body, aliasMap));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -92,10 +176,11 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
   const runEdgesByType = async () => {
     setLoadingKey("type");
     try {
-      await callGraph("edges-by-type", {
+      const body = await callGraph("edges-by-type", {
         edge_type: typeEdgeType.trim(),
         limit: Number(typeLimit) || 100,
       });
+      setResponse(applyAliasesToGraphResponse(body, edgeAliasMap));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -112,18 +197,22 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
         throw new Error("ring and id are required for traversal.");
       }
 
-      const inferred = await inferEdgeTypesFromBlueprint(ring);
+      const inferred = await inferEdgeDefinitionsFromBlueprint(ring);
       setInferredTraverseEdgeTypes(inferred);
       if (inferred.length === 0) {
-        throw new Error(`No edge definitions found in blueprint for ring '${ring}'.`);
+        throw new Error(`No valid source relationships found in blueprint for ring '${ring}'.`);
       }
+      const aliasMap = buildAliasMap(inferred);
+      setEdgeAliasMap(aliasMap);
 
-      await callGraph("traverse", {
+      const body = await callGraph("traverse", {
         node_id: `${ring}/${idx}`,
-        edge_types: inferred,
+        edge_types: inferred.map((item) => item.edgeType),
+        dynamic_edge_types: true,
         direction: direction === "backward" ? "backward" : "forward",
         max_depth: Number(maxDepth) || 3,
       });
+      setResponse(applyAliasesToGraphResponse(body, aliasMap));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -131,7 +220,7 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
     }
   };
 
-  const inferEdgeTypesFromBlueprint = async (ring: string): Promise<string[]> => {
+  const inferEdgeDefinitionsFromBlueprint = async (ring: string): Promise<EdgeDefinition[]> => {
     const blueprintUrl = `${import.meta.env.VITE_API_URL}/_blueprint/irma/${ring}?v=last`;
     const blueprintRes = await fetch(blueprintUrl, {
       method: "GET",
@@ -144,23 +233,32 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
     if (!blueprintRes.ok) {
       throw new Error(blueprint?.message || `Could not load blueprint for ring '${ring}'`);
     }
+    if (blueprint?.enable_graph === false) {
+      return [];
+    }
 
-    return Array.from(
-      new Set(
-        (blueprint?.fields || [])
-          .filter(
-            (f: any) =>
-              f &&
-              typeof f === "object" &&
-              typeof f.edge === "string" &&
-              f.edge.trim() &&
-              typeof f.source === "string" &&
-              f.source.split(":").length === 3 &&
-              f.source.split(":")[1] === "_id",
-          )
-          .map((f: any) => String(f.edge).trim()),
-      ),
-    );
+    const fromBlueprint = typeof blueprint?.name === "string" ? blueprint.name : ring;
+    const edgeMap = new Map<string, EdgeDefinition>();
+    for (const field of blueprint?.fields || []) {
+      if (!field || typeof field !== "object" || typeof field.source !== "string" || field.name === undefined || field.name === null) {
+        continue;
+      }
+      const sourceParts = field.source.split(":");
+      if (sourceParts.length !== 3 || sourceParts[1] !== "_id") {
+        continue;
+      }
+      const edgeType = `${fromBlueprint}:${String(field.name)}:${sourceParts[0]}:${sourceParts[1]}`;
+      const aliases = Array.isArray(field.edges) ? field.edges : [];
+      const current = edgeMap.get(edgeType) || { edgeType };
+      if (!current.outgoingAlias && typeof aliases[0] === "string") {
+        current.outgoingAlias = aliases[0];
+      }
+      if (!current.incomingAlias && typeof aliases[1] === "string") {
+        current.incomingAlias = aliases[1];
+      }
+      edgeMap.set(edgeType, current);
+    }
+    return Array.from(edgeMap.values());
   };
 
   return (
@@ -207,7 +305,7 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-xs text-muted-foreground">
                 Uses `ring` to load blueprint and automatically infers edge types from fields with valid
-                `edge` + `source`.
+                `source` (`&lt;blueprint_from&gt;:&lt;field_from&gt;:&lt;blueprint_to&gt;:&lt;field_to&gt;`).
               </p>
               <p className="text-xs text-muted-foreground">
                 Example: `ring=noma_travel_preferences`, `id=123e4567`, `limit=50`.
@@ -243,7 +341,15 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
               </div>
               <div className="rounded-md border bg-muted/20 p-2 text-xs">
                 <span className="font-medium">Inferred edge types:</span>{" "}
-                {inferredNodeEdgeTypes.length > 0 ? inferredNodeEdgeTypes.join(", ") : "none loaded yet"}
+                {inferredNodeEdgeTypes.length > 0
+                  ? inferredNodeEdgeTypes
+                      .map((item) =>
+                        item.outgoingAlias || item.incomingAlias
+                          ? `${item.edgeType} (${item.outgoingAlias || item.edgeType} / ${item.incomingAlias || item.edgeType})`
+                          : item.edgeType,
+                      )
+                      .join(", ")
+                  : "none loaded yet"}
               </div>
             </div>
           ) : null}
@@ -292,7 +398,7 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
           {activeTab === "traverse" ? (
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-xs text-muted-foreground">
-                Traverse infers `edge_types` from the blueprint fields that define graph edges (`edge` + valid `source`).
+                Traverse infers `edge_types` from blueprint fields with valid `source`.
                 You only provide start node coordinates and traversal controls.
               </p>
               <p className="text-xs text-muted-foreground">
@@ -351,7 +457,15 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
 
               <div className="rounded-md border bg-muted/20 p-2 text-xs">
                 <span className="font-medium">Inferred edge types:</span>{" "}
-                {inferredTraverseEdgeTypes.length > 0 ? inferredTraverseEdgeTypes.join(", ") : "none loaded yet"}
+                {inferredTraverseEdgeTypes.length > 0
+                  ? inferredTraverseEdgeTypes
+                      .map((item) =>
+                        item.outgoingAlias || item.incomingAlias
+                          ? `${item.edgeType} (${item.outgoingAlias || item.edgeType} / ${item.incomingAlias || item.edgeType})`
+                          : item.edgeType,
+                      )
+                      .join(", ")
+                  : "none loaded yet"}
               </div>
             </div>
           ) : null}

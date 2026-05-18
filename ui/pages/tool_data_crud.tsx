@@ -180,7 +180,7 @@ export default function ToolDataCRUD({ readonly, portfolio, org, tool, ring }: T
                 <nav className="ml-auto flex items-center gap-2 hidden">
                   
                   <a
-                    href={`/${portfolio}/${org}/data`}
+                    href={`/${portfolio}/${org}/${tool}`}
                     className={({ isActive }) => (isActive ? "h-8 gap-1" : "h-8 gap-1")}
                     style={{ textDecoration: 'none' }} // Ensure no default link styling
                   >
@@ -202,7 +202,7 @@ export default function ToolDataCRUD({ readonly, portfolio, org, tool, ring }: T
                     <DropdownMenuContent align="end">
                       <DropdownMenuCheckboxItem checked>
                         <a
-                          href={`/${portfolio}/${org}/data`}
+                          href={`/${portfolio}/${org}/${tool}`}
                         >
                         Dashboard
                         </a>           

@@ -55,7 +55,7 @@ export default function ToolDataSheetNav({portfolio,org,tool,section,onNavigate}
                 <button
                     onClick={() => {
                         setOpen(false);
-                        onNavigate(`/${portfolio}/${org}/data`);
+                        onNavigate(`/${portfolio}/${org}/${tool}`);
                     }}
                     className="flex items-center gap-4 px-2.5 text-foreground"
                 >
