@@ -25,6 +25,50 @@ interface EdgeDefinition {
   incomingAlias?: string;
 }
 
+interface ToolOutput {
+  response: unknown;
+  error: string;
+  lastUrl: string;
+}
+
+const emptyToolOutput = (): ToolOutput => ({
+  response: null,
+  error: "",
+  lastUrl: "",
+});
+
+function ToolResultPanel({
+  output,
+  loading,
+  placeholder,
+}: {
+  output: ToolOutput;
+  loading: boolean;
+  placeholder: string;
+}) {
+  return (
+    <div className="space-y-2 pt-2">
+      {output.lastUrl ? (
+        <p className="text-xs text-muted-foreground break-all">POST {output.lastUrl}</p>
+      ) : null}
+      {output.error ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {output.error}
+        </div>
+      ) : null}
+      <div className="max-h-[50vh] overflow-auto rounded-md border bg-muted/20 p-3">
+        <pre className="whitespace-pre-wrap break-words text-xs leading-relaxed">
+          {loading
+            ? "Running query..."
+            : output.response !== null
+              ? JSON.stringify(output.response, null, 2)
+              : placeholder}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
 export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
   const [activeTab, setActiveTab] = useState<"node" | "type" | "traverse">("node");
   const [nodeRing, setNodeRing] = useState("");
@@ -40,24 +84,13 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
   const [direction, setDirection] = useState("forward");
   const [maxDepth, setMaxDepth] = useState("3");
   const [inferredTraverseEdgeTypes, setInferredTraverseEdgeTypes] = useState<EdgeDefinition[]>([]);
-  const [edgeAliasMap, setEdgeAliasMap] = useState<Record<string, EdgeAlias>>({});
-
   const [loadingKey, setLoadingKey] = useState<"" | "node" | "type" | "traverse">("");
-  const [response, setResponse] = useState<unknown>(null);
-  const [error, setError] = useState("");
-  const [lastUrl, setLastUrl] = useState("");
+  const [nodeOutput, setNodeOutput] = useState<ToolOutput>(emptyToolOutput);
+  const [typeOutput, setTypeOutput] = useState<ToolOutput>(emptyToolOutput);
+  const [traverseOutput, setTraverseOutput] = useState<ToolOutput>(emptyToolOutput);
 
-  const parseEdgeTypes = (raw: string) =>
-    raw
-      .split(",")
-      .map((v) => v.trim())
-      .filter(Boolean);
-
-  const callGraph = async (path: string, payload: Record<string, unknown>) => {
+  const fetchGraph = async (path: string, payload: Record<string, unknown>) => {
     const url = `${import.meta.env.VITE_API_URL}/_graph/${portfolio}/${org}/${path}`;
-    setLastUrl(url);
-    setError("");
-    setResponse(null);
     const res = await fetch(url, {
       method: "POST",
       headers: {
@@ -71,7 +104,7 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
     if (!res.ok) {
       throw new Error(body?.message || `Request failed (${res.status})`);
     }
-    return body;
+    return { url, body };
   };
 
   const buildAliasMap = (definitions: EdgeDefinition[]) => {
@@ -148,6 +181,7 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
 
   const runNodeEdges = async () => {
     setLoadingKey("node");
+    setNodeOutput((prev) => ({ ...prev, error: "", response: null }));
     try {
       const ring = nodeRing.trim();
       const idx = nodeDocId.trim();
@@ -158,16 +192,22 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
       const inferred = await inferEdgeDefinitionsFromBlueprint(ring);
       setInferredNodeEdgeTypes(inferred);
       const aliasMap = buildAliasMap(inferred);
-      setEdgeAliasMap(aliasMap);
 
-      const body = await callGraph("node-edges", {
+      const { url, body } = await fetchGraph("node-edges", {
         node_id: node,
         edge_types: inferred.map((item) => item.edgeType),
         limit: Number(nodeLimit) || 100,
       });
-      setResponse(applyAliasesToGraphResponse(body, aliasMap));
+      setNodeOutput({
+        lastUrl: url,
+        error: "",
+        response: applyAliasesToGraphResponse(body, aliasMap),
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      setNodeOutput((prev) => ({
+        ...prev,
+        error: e instanceof Error ? e.message : "Unknown error",
+      }));
     } finally {
       setLoadingKey("");
     }
@@ -175,14 +215,22 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
 
   const runEdgesByType = async () => {
     setLoadingKey("type");
+    setTypeOutput((prev) => ({ ...prev, error: "", response: null }));
     try {
-      const body = await callGraph("edges-by-type", {
+      const { url, body } = await fetchGraph("edges-by-type", {
         edge_type: typeEdgeType.trim(),
         limit: Number(typeLimit) || 100,
       });
-      setResponse(applyAliasesToGraphResponse(body, edgeAliasMap));
+      setTypeOutput({
+        lastUrl: url,
+        error: "",
+        response: applyAliasesToGraphResponse(body, {}),
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      setTypeOutput((prev) => ({
+        ...prev,
+        error: e instanceof Error ? e.message : "Unknown error",
+      }));
     } finally {
       setLoadingKey("");
     }
@@ -190,6 +238,7 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
 
   const runTraverse = async () => {
     setLoadingKey("traverse");
+    setTraverseOutput((prev) => ({ ...prev, error: "", response: null }));
     try {
       const ring = traverseRing.trim();
       const idx = traverseId.trim();
@@ -199,22 +248,26 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
 
       const inferred = await inferEdgeDefinitionsFromBlueprint(ring);
       setInferredTraverseEdgeTypes(inferred);
-      if (inferred.length === 0) {
-        throw new Error(`No valid source relationships found in blueprint for ring '${ring}'.`);
-      }
       const aliasMap = buildAliasMap(inferred);
-      setEdgeAliasMap(aliasMap);
+      const nodeId = `${ring}/${idx}`;
 
-      const body = await callGraph("traverse", {
-        node_id: `${ring}/${idx}`,
+      const { url, body } = await fetchGraph("traverse", {
+        node_id: nodeId,
         edge_types: inferred.map((item) => item.edgeType),
         dynamic_edge_types: true,
         direction: direction === "backward" ? "backward" : "forward",
         max_depth: Number(maxDepth) || 3,
       });
-      setResponse(applyAliasesToGraphResponse(body, aliasMap));
+      setTraverseOutput({
+        lastUrl: url,
+        error: "",
+        response: applyAliasesToGraphResponse(body, aliasMap),
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      setTraverseOutput((prev) => ({
+        ...prev,
+        error: e instanceof Error ? e.message : "Unknown error",
+      }));
     } finally {
       setLoadingKey("");
     }
@@ -351,6 +404,11 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
                       .join(", ")
                   : "none loaded yet"}
               </div>
+              <ToolResultPanel
+                output={nodeOutput}
+                loading={loadingKey === "node"}
+                placeholder="Run Node Edges to see results."
+              />
             </div>
           ) : null}
 
@@ -392,14 +450,19 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
                 </Button>
                 </div>
               </div>
+              <ToolResultPanel
+                output={typeOutput}
+                loading={loadingKey === "type"}
+                placeholder="Run Edges By Type to see results."
+              />
             </div>
           ) : null}
 
           {activeTab === "traverse" ? (
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-xs text-muted-foreground">
-                Traverse infers `edge_types` from blueprint fields with valid `source`.
-                You only provide start node coordinates and traversal controls.
+                Traverse infers edge labels from blueprint fields with valid `source`.
+                Forward and backward modes discover edges per hop (outgoing vs incoming) so depth is not limited to the start node blueprint.
               </p>
               <p className="text-xs text-muted-foreground">
                 Example: `ring=noma_travel_preferences`, `id=123e4567`, `direction=forward`, `max_depth=2`.
@@ -467,21 +530,13 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
                       .join(", ")
                   : "none loaded yet"}
               </div>
+              <ToolResultPanel
+                output={traverseOutput}
+                loading={loadingKey === "traverse"}
+                placeholder="Run Traverse to see results."
+              />
             </div>
           ) : null}
-
-          {lastUrl ? <p className="text-xs text-muted-foreground break-all">POST {lastUrl}</p> : null}
-          {error ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </div>
-          ) : null}
-
-          <div className="max-h-[60vh] overflow-auto rounded-md border bg-muted/20 p-3">
-            <pre className="whitespace-pre-wrap break-words text-xs leading-relaxed">
-              {response !== null ? JSON.stringify(response, null, 2) : "Run a graph query to see results."}
-            </pre>
-          </div>
         </CardContent>
       </Card>
     </main>
