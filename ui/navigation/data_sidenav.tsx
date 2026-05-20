@@ -96,13 +96,13 @@ export default function ToolDataSideNav({portfolio,org,tool,section,onNavigate}:
                     }
                     >
                       <Ghost className="h-5 w-5" />
-                      <span className="sr-only">TMP</span>
+                      <span className="sr-only">Temporary</span>
                     </button>
 
-                    <span className="text-xxs ">TMP</span>
+                    <span className="text-xxs ">Temporary</span>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent side="right">TMP</TooltipContent>
+                <TooltipContent side="right">Temporary</TooltipContent>
             </Tooltip>
           </TooltipProvider>
 
@@ -119,12 +119,12 @@ export default function ToolDataSideNav({portfolio,org,tool,section,onNavigate}:
                 }
               >
                 <Microscope className="h-5 w-5" />
-                <span className="sr-only">Inspect</span>
+                <span className="sr-only">Chats</span>
               </button>
-              <span className="text-xxs ">Inspect</span>
+              <span className="text-xxs ">Chats</span>
             </div>
           </TooltipTrigger>
-          <TooltipContent side="right">Inspect</TooltipContent>
+          <TooltipContent side="right">Chats</TooltipContent>
         </Tooltip>
       </TooltipProvider>
 
