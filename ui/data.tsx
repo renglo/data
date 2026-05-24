@@ -4,6 +4,7 @@ import ToolDataTmpArtifact from "./pages/tool_data_tmp_artifact";
 import DataExplorer from "./pages/data_explorer";
 import ChatInspect from "./pages/chat_inspect"
 import GraphExplorer from "./pages/graph_explorer";
+import SearchExplorer from "./pages/search_explorer";
 
 
 interface Portfolio {
@@ -57,6 +58,8 @@ export default function Data({ portfolio, org, tool, section, tree, query, onNav
               <ChatInspect portfolio={portfolio} org={org} tool={tool} tree={tree} onNavigate={onNavigate} query={query} />
               ) : section === "graph" ? (
               <GraphExplorer portfolio={portfolio} org={org} />
+              ) : section === "search" ? (
+              <SearchExplorer portfolio={portfolio} org={org} />
               ) : section === "dashboard" ? (
               <ToolDataDashboard />
               ) : null

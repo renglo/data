@@ -14,12 +14,67 @@ interface GraphExplorerProps {
   org: string;
 }
 
+interface EdgeAlias {
+  outgoing?: string;
+  incoming?: string;
+}
+
+interface EdgeDefinition {
+  edgeType: string;
+  outgoingAlias?: string;
+  incomingAlias?: string;
+}
+
+interface ToolOutput {
+  response: unknown;
+  error: string;
+  lastUrl: string;
+}
+
+const emptyToolOutput = (): ToolOutput => ({
+  response: null,
+  error: "",
+  lastUrl: "",
+});
+
+function ToolResultPanel({
+  output,
+  loading,
+  placeholder,
+}: {
+  output: ToolOutput;
+  loading: boolean;
+  placeholder: string;
+}) {
+  return (
+    <div className="space-y-2 pt-2">
+      {output.lastUrl ? (
+        <p className="text-xs text-muted-foreground break-all">POST {output.lastUrl}</p>
+      ) : null}
+      {output.error ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {output.error}
+        </div>
+      ) : null}
+      <div className="max-h-[50vh] overflow-auto rounded-md border bg-muted/20 p-3">
+        <pre className="whitespace-pre-wrap break-words text-xs leading-relaxed">
+          {loading
+            ? "Running query..."
+            : output.response !== null
+              ? JSON.stringify(output.response, null, 2)
+              : placeholder}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
 export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
   const [activeTab, setActiveTab] = useState<"node" | "type" | "traverse">("node");
   const [nodeRing, setNodeRing] = useState("");
   const [nodeDocId, setNodeDocId] = useState("");
   const [nodeLimit, setNodeLimit] = useState("100");
-  const [inferredNodeEdgeTypes, setInferredNodeEdgeTypes] = useState<string[]>([]);
+  const [inferredNodeEdgeTypes, setInferredNodeEdgeTypes] = useState<EdgeDefinition[]>([]);
 
   const [typeEdgeType, setTypeEdgeType] = useState("");
   const [typeLimit, setTypeLimit] = useState("100");
@@ -28,24 +83,14 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
   const [traverseId, setTraverseId] = useState("");
   const [direction, setDirection] = useState("forward");
   const [maxDepth, setMaxDepth] = useState("3");
-  const [inferredTraverseEdgeTypes, setInferredTraverseEdgeTypes] = useState<string[]>([]);
-
+  const [inferredTraverseEdgeTypes, setInferredTraverseEdgeTypes] = useState<EdgeDefinition[]>([]);
   const [loadingKey, setLoadingKey] = useState<"" | "node" | "type" | "traverse">("");
-  const [response, setResponse] = useState<unknown>(null);
-  const [error, setError] = useState("");
-  const [lastUrl, setLastUrl] = useState("");
+  const [nodeOutput, setNodeOutput] = useState<ToolOutput>(emptyToolOutput);
+  const [typeOutput, setTypeOutput] = useState<ToolOutput>(emptyToolOutput);
+  const [traverseOutput, setTraverseOutput] = useState<ToolOutput>(emptyToolOutput);
 
-  const parseEdgeTypes = (raw: string) =>
-    raw
-      .split(",")
-      .map((v) => v.trim())
-      .filter(Boolean);
-
-  const callGraph = async (path: string, payload: Record<string, unknown>) => {
+  const fetchGraph = async (path: string, payload: Record<string, unknown>) => {
     const url = `${import.meta.env.VITE_API_URL}/_graph/${portfolio}/${org}/${path}`;
-    setLastUrl(url);
-    setError("");
-    setResponse(null);
     const res = await fetch(url, {
       method: "POST",
       headers: {
@@ -59,11 +104,84 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
     if (!res.ok) {
       throw new Error(body?.message || `Request failed (${res.status})`);
     }
-    setResponse(body);
+    return { url, body };
+  };
+
+  const buildAliasMap = (definitions: EdgeDefinition[]) => {
+    const nextMap: Record<string, EdgeAlias> = {};
+    for (const definition of definitions) {
+      nextMap[definition.edgeType] = {
+        outgoing: definition.outgoingAlias,
+        incoming: definition.incomingAlias,
+      };
+    }
+    return nextMap;
+  };
+
+  const resolveAlias = (
+    edgeType: string,
+    aliasMap: Record<string, EdgeAlias>,
+    perspective: "outgoing" | "incoming",
+  ) => {
+    const aliases = aliasMap[edgeType];
+    if (!aliases) return edgeType;
+    if (perspective === "outgoing") {
+      return aliases.outgoing || edgeType;
+    }
+    return aliases.incoming || edgeType;
+  };
+
+  const applyAliasesToGraphResponse = (
+    graphResponse: any,
+    aliasMap: Record<string, EdgeAlias>,
+  ) => {
+    if (!graphResponse || typeof graphResponse !== "object") {
+      return graphResponse;
+    }
+    const result = { ...graphResponse };
+
+    if (Array.isArray(result.outgoing)) {
+      result.outgoing = result.outgoing.map((edge: any) => ({
+        ...edge,
+        edge_label: resolveAlias(String(edge?.edge_type || ""), aliasMap, "outgoing"),
+      }));
+    }
+
+    if (Array.isArray(result.incoming)) {
+      result.incoming = result.incoming.map((edge: any) => ({
+        ...edge,
+        edge_label: resolveAlias(String(edge?.edge_type || ""), aliasMap, "incoming"),
+      }));
+    }
+
+    if (Array.isArray(result.items)) {
+      result.items = result.items.map((edge: any) => ({
+        ...edge,
+        edge_label_outgoing: resolveAlias(String(edge?.edge_type || ""), aliasMap, "outgoing"),
+        edge_label_incoming: resolveAlias(String(edge?.edge_type || ""), aliasMap, "incoming"),
+      }));
+    }
+
+    if (Array.isArray(result.steps)) {
+      const perspective = result.direction === "backward" ? "incoming" : "outgoing";
+      result.steps = result.steps.map((step: any) => {
+        const edgeType = String(step?.edge?.edge_type || "");
+        return {
+          ...step,
+          edge: {
+            ...step?.edge,
+            edge_label: resolveAlias(edgeType, aliasMap, perspective),
+          },
+        };
+      });
+    }
+
+    return result;
   };
 
   const runNodeEdges = async () => {
     setLoadingKey("node");
+    setNodeOutput((prev) => ({ ...prev, error: "", response: null }));
     try {
       const ring = nodeRing.trim();
       const idx = nodeDocId.trim();
@@ -71,19 +189,25 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
         throw new Error("ring and id are required.");
       }
       const node = `${ring}/${idx}`;
-      const inferred = await inferEdgeTypesFromBlueprint(ring);
+      const inferred = await inferEdgeDefinitionsFromBlueprint(ring);
       setInferredNodeEdgeTypes(inferred);
-      if (inferred.length === 0) {
-        throw new Error(`No edge definitions found in blueprint for ring '${ring}'.`);
-      }
+      const aliasMap = buildAliasMap(inferred);
 
-      await callGraph("node-edges", {
+      const { url, body } = await fetchGraph("node-edges", {
         node_id: node,
-        edge_types: inferred,
+        edge_types: inferred.map((item) => item.edgeType),
         limit: Number(nodeLimit) || 100,
       });
+      setNodeOutput({
+        lastUrl: url,
+        error: "",
+        response: applyAliasesToGraphResponse(body, aliasMap),
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      setNodeOutput((prev) => ({
+        ...prev,
+        error: e instanceof Error ? e.message : "Unknown error",
+      }));
     } finally {
       setLoadingKey("");
     }
@@ -91,13 +215,22 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
 
   const runEdgesByType = async () => {
     setLoadingKey("type");
+    setTypeOutput((prev) => ({ ...prev, error: "", response: null }));
     try {
-      await callGraph("edges-by-type", {
+      const { url, body } = await fetchGraph("edges-by-type", {
         edge_type: typeEdgeType.trim(),
         limit: Number(typeLimit) || 100,
       });
+      setTypeOutput({
+        lastUrl: url,
+        error: "",
+        response: applyAliasesToGraphResponse(body, {}),
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      setTypeOutput((prev) => ({
+        ...prev,
+        error: e instanceof Error ? e.message : "Unknown error",
+      }));
     } finally {
       setLoadingKey("");
     }
@@ -105,6 +238,7 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
 
   const runTraverse = async () => {
     setLoadingKey("traverse");
+    setTraverseOutput((prev) => ({ ...prev, error: "", response: null }));
     try {
       const ring = traverseRing.trim();
       const idx = traverseId.trim();
@@ -112,26 +246,34 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
         throw new Error("ring and id are required for traversal.");
       }
 
-      const inferred = await inferEdgeTypesFromBlueprint(ring);
+      const inferred = await inferEdgeDefinitionsFromBlueprint(ring);
       setInferredTraverseEdgeTypes(inferred);
-      if (inferred.length === 0) {
-        throw new Error(`No edge definitions found in blueprint for ring '${ring}'.`);
-      }
+      const aliasMap = buildAliasMap(inferred);
+      const nodeId = `${ring}/${idx}`;
 
-      await callGraph("traverse", {
-        node_id: `${ring}/${idx}`,
-        edge_types: inferred,
+      const { url, body } = await fetchGraph("traverse", {
+        node_id: nodeId,
+        edge_types: inferred.map((item) => item.edgeType),
+        dynamic_edge_types: true,
         direction: direction === "backward" ? "backward" : "forward",
         max_depth: Number(maxDepth) || 3,
       });
+      setTraverseOutput({
+        lastUrl: url,
+        error: "",
+        response: applyAliasesToGraphResponse(body, aliasMap),
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      setTraverseOutput((prev) => ({
+        ...prev,
+        error: e instanceof Error ? e.message : "Unknown error",
+      }));
     } finally {
       setLoadingKey("");
     }
   };
 
-  const inferEdgeTypesFromBlueprint = async (ring: string): Promise<string[]> => {
+  const inferEdgeDefinitionsFromBlueprint = async (ring: string): Promise<EdgeDefinition[]> => {
     const blueprintUrl = `${import.meta.env.VITE_API_URL}/_blueprint/irma/${ring}?v=last`;
     const blueprintRes = await fetch(blueprintUrl, {
       method: "GET",
@@ -144,23 +286,32 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
     if (!blueprintRes.ok) {
       throw new Error(blueprint?.message || `Could not load blueprint for ring '${ring}'`);
     }
+    if (blueprint?.enable_graph === false) {
+      return [];
+    }
 
-    return Array.from(
-      new Set(
-        (blueprint?.fields || [])
-          .filter(
-            (f: any) =>
-              f &&
-              typeof f === "object" &&
-              typeof f.edge === "string" &&
-              f.edge.trim() &&
-              typeof f.source === "string" &&
-              f.source.split(":").length === 3 &&
-              f.source.split(":")[1] === "_id",
-          )
-          .map((f: any) => String(f.edge).trim()),
-      ),
-    );
+    const fromBlueprint = typeof blueprint?.name === "string" ? blueprint.name : ring;
+    const edgeMap = new Map<string, EdgeDefinition>();
+    for (const field of blueprint?.fields || []) {
+      if (!field || typeof field !== "object" || typeof field.source !== "string" || field.name === undefined || field.name === null) {
+        continue;
+      }
+      const sourceParts = field.source.split(":");
+      if (sourceParts.length !== 3 || sourceParts[1] !== "_id") {
+        continue;
+      }
+      const edgeType = `${fromBlueprint}:${String(field.name)}:${sourceParts[0]}:${sourceParts[1]}`;
+      const aliases = Array.isArray(field.edges) ? field.edges : [];
+      const current = edgeMap.get(edgeType) || { edgeType };
+      if (!current.outgoingAlias && typeof aliases[0] === "string") {
+        current.outgoingAlias = aliases[0];
+      }
+      if (!current.incomingAlias && typeof aliases[1] === "string") {
+        current.incomingAlias = aliases[1];
+      }
+      edgeMap.set(edgeType, current);
+    }
+    return Array.from(edgeMap.values());
   };
 
   return (
@@ -207,7 +358,7 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-xs text-muted-foreground">
                 Uses `ring` to load blueprint and automatically infers edge types from fields with valid
-                `edge` + `source`.
+                `source` (`&lt;blueprint_from&gt;:&lt;field_from&gt;:&lt;blueprint_to&gt;:&lt;field_to&gt;`).
               </p>
               <p className="text-xs text-muted-foreground">
                 Example: `ring=noma_travel_preferences`, `id=123e4567`, `limit=50`.
@@ -243,8 +394,21 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
               </div>
               <div className="rounded-md border bg-muted/20 p-2 text-xs">
                 <span className="font-medium">Inferred edge types:</span>{" "}
-                {inferredNodeEdgeTypes.length > 0 ? inferredNodeEdgeTypes.join(", ") : "none loaded yet"}
+                {inferredNodeEdgeTypes.length > 0
+                  ? inferredNodeEdgeTypes
+                      .map((item) =>
+                        item.outgoingAlias || item.incomingAlias
+                          ? `${item.edgeType} (${item.outgoingAlias || item.edgeType} / ${item.incomingAlias || item.edgeType})`
+                          : item.edgeType,
+                      )
+                      .join(", ")
+                  : "none loaded yet"}
               </div>
+              <ToolResultPanel
+                output={nodeOutput}
+                loading={loadingKey === "node"}
+                placeholder="Run Node Edges to see results."
+              />
             </div>
           ) : null}
 
@@ -286,14 +450,19 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
                 </Button>
                 </div>
               </div>
+              <ToolResultPanel
+                output={typeOutput}
+                loading={loadingKey === "type"}
+                placeholder="Run Edges By Type to see results."
+              />
             </div>
           ) : null}
 
           {activeTab === "traverse" ? (
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-xs text-muted-foreground">
-                Traverse infers `edge_types` from the blueprint fields that define graph edges (`edge` + valid `source`).
-                You only provide start node coordinates and traversal controls.
+                Traverse infers edge labels from blueprint fields with valid `source`.
+                Forward and backward modes discover edges per hop (outgoing vs incoming) so depth is not limited to the start node blueprint.
               </p>
               <p className="text-xs text-muted-foreground">
                 Example: `ring=noma_travel_preferences`, `id=123e4567`, `direction=forward`, `max_depth=2`.
@@ -351,23 +520,23 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
 
               <div className="rounded-md border bg-muted/20 p-2 text-xs">
                 <span className="font-medium">Inferred edge types:</span>{" "}
-                {inferredTraverseEdgeTypes.length > 0 ? inferredTraverseEdgeTypes.join(", ") : "none loaded yet"}
+                {inferredTraverseEdgeTypes.length > 0
+                  ? inferredTraverseEdgeTypes
+                      .map((item) =>
+                        item.outgoingAlias || item.incomingAlias
+                          ? `${item.edgeType} (${item.outgoingAlias || item.edgeType} / ${item.incomingAlias || item.edgeType})`
+                          : item.edgeType,
+                      )
+                      .join(", ")
+                  : "none loaded yet"}
               </div>
+              <ToolResultPanel
+                output={traverseOutput}
+                loading={loadingKey === "traverse"}
+                placeholder="Run Traverse to see results."
+              />
             </div>
           ) : null}
-
-          {lastUrl ? <p className="text-xs text-muted-foreground break-all">POST {lastUrl}</p> : null}
-          {error ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </div>
-          ) : null}
-
-          <div className="max-h-[60vh] overflow-auto rounded-md border bg-muted/20 p-3">
-            <pre className="whitespace-pre-wrap break-words text-xs leading-relaxed">
-              {response !== null ? JSON.stringify(response, null, 2) : "Run a graph query to see results."}
-            </pre>
-          </div>
         </CardContent>
       </Card>
     </main>

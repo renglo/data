@@ -2,6 +2,7 @@ import {
   Search,
   EllipsisVertical,
   Database,
+  Orbit,
 } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
@@ -55,12 +56,23 @@ export default function ToolDataSheetNav({portfolio,org,tool,section,onNavigate}
                 <button
                     onClick={() => {
                         setOpen(false);
-                        onNavigate(`/${portfolio}/${org}/data`);
+                        onNavigate(`/${portfolio}/${org}/${tool}`);
                     }}
                     className="flex items-center gap-4 px-2.5 text-foreground"
                 >
                     <Database className="h-5 w-5" />
                     Data
+                </button>
+
+                <button
+                    onClick={() => {
+                        setOpen(false);
+                        onNavigate(`/${portfolio}/${org}/${tool}/search`);
+                    }}
+                    className="flex items-center gap-4 px-2.5 text-foreground"
+                >
+                    <Orbit className="h-5 w-5" />
+                    Search Explorer
                 </button>
                 
                 <span className="relative hidden">
