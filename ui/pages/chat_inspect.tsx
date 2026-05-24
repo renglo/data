@@ -413,11 +413,16 @@ export default function ChatInspect({ portfolio, org, tool, tree, query }: Agent
     if (t === "json")
       return <ChatWidgetJson key={idx} key_id={String(idx)} item={anyItem} active={true} />;
     if (t === "text") return <ChatWidgetText key={idx} key_id={String(idx)} item={anyItem} />;
+    if (t === "system") return <ChatWidgetText key={idx} key_id={String(idx)} item={anyItem} />;
     if (t === "command") return <ChatWidgetCommand key={idx} key_id={String(idx)} item={anyItem} />;
     if (t === "transient") return <ChatWidgetTransient key={idx} key_id={String(idx)} item={anyItem} />;
     if (t === "error") return <ChatWidgetError key={idx} key_id={String(idx)} item={anyItem} />;
     if (t === "consent" && it["_interface"] === "binary_consent")
       return <ChatWidgetText key={idx} key_id={String(idx)} item={anyItem} />;
+    if (t === "tool_rq")
+      return <ChatWidgetJson key={idx} key_id={String(idx)} item={anyItem} active={true} label='TOOL_RQ' />;
+    if (t === "tool_rs")
+      return <ChatWidgetJson key={idx} key_id={String(idx)} item={anyItem} active={true} label='TOOL_RS' />;
     return null;
   };
 
