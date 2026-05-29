@@ -118,22 +118,9 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
     return nextMap;
   };
 
-  const resolveAlias = (
-    edgeType: string,
-    aliasMap: Record<string, EdgeAlias>,
-    perspective: "outgoing" | "incoming",
-  ) => {
-    const aliases = aliasMap[edgeType];
-    if (!aliases) return edgeType;
-    if (perspective === "outgoing") {
-      return aliases.outgoing || edgeType;
-    }
-    return aliases.incoming || edgeType;
-  };
-
   const applyAliasesToGraphResponse = (
     graphResponse: any,
-    aliasMap: Record<string, EdgeAlias>,
+    _aliasMap: Record<string, EdgeAlias>,
   ) => {
     if (!graphResponse || typeof graphResponse !== "object") {
       return graphResponse;
@@ -143,34 +130,46 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
     if (Array.isArray(result.outgoing)) {
       result.outgoing = result.outgoing.map((edge: any) => ({
         ...edge,
-        edge_label: resolveAlias(String(edge?.edge_type || ""), aliasMap, "outgoing"),
+        edge_label:
+          typeof edge?.edge_label === "string" && edge.edge_label.trim()
+            ? edge.edge_label.trim()
+            : String(edge?.edge_type || ""),
       }));
     }
 
     if (Array.isArray(result.incoming)) {
       result.incoming = result.incoming.map((edge: any) => ({
         ...edge,
-        edge_label: resolveAlias(String(edge?.edge_type || ""), aliasMap, "incoming"),
+        edge_label:
+          typeof edge?.edge_label === "string" && edge.edge_label.trim()
+            ? edge.edge_label.trim()
+            : String(edge?.edge_type || ""),
       }));
     }
 
     if (Array.isArray(result.items)) {
       result.items = result.items.map((edge: any) => ({
         ...edge,
-        edge_label_outgoing: resolveAlias(String(edge?.edge_type || ""), aliasMap, "outgoing"),
-        edge_label_incoming: resolveAlias(String(edge?.edge_type || ""), aliasMap, "incoming"),
+        edge_label:
+          typeof edge?.edge_label === "string" && edge.edge_label.trim()
+            ? edge.edge_label.trim()
+            : String(edge?.edge_type || ""),
       }));
     }
 
     if (Array.isArray(result.steps)) {
-      const perspective = result.direction === "backward" ? "incoming" : "outgoing";
       result.steps = result.steps.map((step: any) => {
-        const edgeType = String(step?.edge?.edge_type || "");
+        const edge = step?.edge || {};
+        const edgeType = String(edge?.edge_type || "");
+        const edgeLabel =
+          typeof edge?.edge_label === "string" && edge.edge_label.trim()
+            ? edge.edge_label.trim()
+            : edgeType;
         return {
           ...step,
           edge: {
-            ...step?.edge,
-            edge_label: resolveAlias(edgeType, aliasMap, perspective),
+            ...edge,
+            edge_label: edgeLabel,
           },
         };
       });
