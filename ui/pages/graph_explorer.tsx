@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { parseBlueprintSourceSpec } from "@/lib/console_utils";
 import { 
   Search, 
   Tag,
@@ -36,6 +37,15 @@ const emptyToolOutput = (): ToolOutput => ({
   error: "",
   lastUrl: "",
 });
+
+const toUpperSnake = (raw: string): string =>
+  String(raw ?? "")
+    .trim()
+    .replace(/[^A-Za-z0-9]+/g, "_")
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
 
 function ToolResultPanel({
   output,
@@ -290,25 +300,50 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
     }
 
     const fromBlueprint = typeof blueprint?.name === "string" ? blueprint.name : ring;
+    const idField =
+      Array.isArray(blueprint?.indexes?.path) && blueprint.indexes.path.length > 0
+        ? String(blueprint.indexes.path[0] ?? "_id").trim() || "_id"
+        : "_id";
     const edgeMap = new Map<string, EdgeDefinition>();
     for (const field of blueprint?.fields || []) {
-      if (!field || typeof field !== "object" || typeof field.source !== "string" || field.name === undefined || field.name === null) {
+      if (!field || typeof field !== "object" || field.name === undefined || field.name === null) {
         continue;
       }
-      const sourceParts = field.source.split(":");
-      if (sourceParts.length !== 3 || sourceParts[1] !== "_id") {
-        continue;
+      const fieldName = String(field.name);
+      const sourceSpec = parseBlueprintSourceSpec((field as Record<string, unknown>).source);
+      if (sourceSpec) {
+        const edgeType = `${fromBlueprint}:${fieldName}:${sourceSpec.target}:${sourceSpec.targetKey}`;
+        const sourceLabels =
+          field.source && typeof field.source === "object" && !Array.isArray(field.source)
+            ? (field.source as Record<string, unknown>).label
+            : undefined;
+        const sourceAliases = Array.isArray(sourceLabels)
+          ? [sourceLabels[0], sourceLabels[1]]
+          : [];
+        const aliases = Array.isArray(field.edges) && field.edges.length > 0 ? field.edges : sourceAliases;
+        const current = edgeMap.get(edgeType) || { edgeType };
+        if (!current.outgoingAlias && typeof aliases[0] === "string") {
+          current.outgoingAlias = aliases[0];
+        }
+        if (!current.incomingAlias && typeof aliases[1] === "string") {
+          current.incomingAlias = aliases[1];
+        }
+        edgeMap.set(edgeType, current);
       }
-      const edgeType = `${fromBlueprint}:${String(field.name)}:${sourceParts[0]}:${sourceParts[1]}`;
-      const aliases = Array.isArray(field.edges) ? field.edges : [];
-      const current = edgeMap.get(edgeType) || { edgeType };
-      if (!current.outgoingAlias && typeof aliases[0] === "string") {
-        current.outgoingAlias = aliases[0];
+
+      const literalEnabledRaw = (field as Record<string, unknown>).literal_edge;
+      const literalEnabled =
+        literalEnabledRaw === true ||
+        (typeof literalEnabledRaw === "string" &&
+          ["1", "true", "yes", "y", "on"].includes(literalEnabledRaw.trim().toLowerCase()));
+      if (literalEnabled) {
+        const edgeType = `${fromBlueprint}:${idField}:_literal:${fieldName}`;
+        const current = edgeMap.get(edgeType) || { edgeType };
+        if (!current.outgoingAlias) {
+          current.outgoingAlias = `HAS_${toUpperSnake(fieldName)}`;
+        }
+        edgeMap.set(edgeType, current);
       }
-      if (!current.incomingAlias && typeof aliases[1] === "string") {
-        current.incomingAlias = aliases[1];
-      }
-      edgeMap.set(edgeType, current);
     }
     return Array.from(edgeMap.values());
   };
