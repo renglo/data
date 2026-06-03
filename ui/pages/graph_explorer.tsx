@@ -1,8 +1,16 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { parseBlueprintSourceSpec } from "@/lib/console_utils";
+import RadialGraph, {
+  type RadialLegendItem,
+} from "../components/radial-graph";
+import {
+  buildNodeEdgesRadialGraphModel,
+  buildTraverseRadialGraphModel,
+} from "../components/radial-graph-models";
 import { 
   Search, 
   Tag,
@@ -47,6 +55,17 @@ const toUpperSnake = (raw: string): string =>
     .replace(/^_+|_+$/g, "")
     .toUpperCase();
 
+const HOP_COLORS = [
+  "#BD33A3", // hop 1: purple
+  "#FF4C00", // hop 2: orange
+  "#FFBF00", // hop 3: yellow
+  "#98CC31", // hop 4: green
+  "#3b82f6", // hop 5: blue
+  "#6366f1", // hop 6: indigo
+  "#a855f7", // hop 7: violet
+  "#ec4899", // hop 8: pink
+];
+
 function ToolResultPanel({
   output,
   loading,
@@ -75,6 +94,159 @@ function ToolResultPanel({
               : placeholder}
         </pre>
       </div>
+    </div>
+  );
+}
+
+function NodeEdgesResultPanel({
+  output,
+  loading,
+  placeholder,
+  fallbackNodeId,
+}: {
+  output: ToolOutput;
+  loading: boolean;
+  placeholder: string;
+  fallbackNodeId: string;
+}) {
+  const radialModel = useMemo(
+    () => buildNodeEdgesRadialGraphModel(output.response, fallbackNodeId),
+    [output.response, fallbackNodeId],
+  );
+
+  return (
+    <div className="space-y-2 pt-2">
+      {output.lastUrl ? (
+        <p className="text-xs text-muted-foreground break-all">POST {output.lastUrl}</p>
+      ) : null}
+      {output.error ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {output.error}
+        </div>
+      ) : null}
+      <Tabs defaultValue="radial" className="space-y-2">
+        <TabsList className="w-fit">
+          <TabsTrigger value="radial">Radial graph</TabsTrigger>
+          <TabsTrigger value="raw-json">Raw JSON</TabsTrigger>
+        </TabsList>
+        <TabsContent value="radial" className="mt-0">
+          <div className="max-h-[65vh] overflow-auto rounded-md border bg-muted/20 p-3">
+            {loading ? (
+              <div className="text-sm text-muted-foreground">Running query...</div>
+            ) : output.response === null ? (
+              <div className="text-sm text-muted-foreground">{placeholder}</div>
+            ) : radialModel.nodes.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No connected incoming/outgoing edges for this node.</div>
+            ) : (
+              <RadialGraph
+                nodes={radialModel.nodes}
+                links={radialModel.links}
+                currentNodeId={radialModel.centerId}
+                ariaLabel="Radial graph for node edges"
+                edgeColorMode="direction"
+                pillOpacity={0.9}
+                labelAlong={0.72}
+              />
+            )}
+          </div>
+        </TabsContent>
+        <TabsContent value="raw-json" className="mt-0">
+          <div className="max-h-[65vh] overflow-y-auto rounded-md border bg-muted/20 p-3">
+            <pre className="whitespace-pre-wrap break-words text-xs leading-relaxed">
+              {loading
+                ? "Running query..."
+                : output.response !== null
+                  ? JSON.stringify(output.response, null, 2)
+                  : placeholder}
+            </pre>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function TraverseResultPanel({
+  output,
+  loading,
+  placeholder,
+  fallbackStartNodeId,
+}: {
+  output: ToolOutput;
+  loading: boolean;
+  placeholder: string;
+  fallbackStartNodeId: string;
+}) {
+  const radialModel = useMemo(
+    () => buildTraverseRadialGraphModel(output.response, fallbackStartNodeId),
+    [output.response, fallbackStartNodeId],
+  );
+
+  const traverseHopLegend = useMemo(() => {
+    const hops: number[] = radialModel.links
+      .map((link) => link.hop)
+      .filter((hop): hop is number => typeof hop === "number" && Number.isFinite(hop));
+    const uniqueHops = Array.from(new Set<number>(hops))
+      .sort((a, b) => a - b)
+      .slice(0, 12);
+    return uniqueHops;
+  }, [radialModel.links]);
+
+  const legendItems = useMemo<RadialLegendItem[]>(() => ([
+    ...traverseHopLegend.map((hop) => ({ label: `Hop ${hop}`, color: HOP_COLORS[(hop - 1) % HOP_COLORS.length] })),
+    { label: "Current node", color: "#8a6df6" },
+  ]), [traverseHopLegend]);
+
+  return (
+    <div className="space-y-2 pt-2">
+      {output.lastUrl ? (
+        <p className="text-xs text-muted-foreground break-all">POST {output.lastUrl}</p>
+      ) : null}
+      {output.error ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {output.error}
+        </div>
+      ) : null}
+      <Tabs defaultValue="radial" className="space-y-2">
+        <TabsList className="w-fit">
+          <TabsTrigger value="radial">Radial graph</TabsTrigger>
+          <TabsTrigger value="raw-json">Raw JSON</TabsTrigger>
+        </TabsList>
+        <TabsContent value="radial" className="mt-0">
+          <div className="max-h-[65vh] overflow-auto rounded-md border bg-muted/20 p-3">
+            {loading ? (
+              <div className="text-sm text-muted-foreground">Running query...</div>
+            ) : output.response === null ? (
+              <div className="text-sm text-muted-foreground">{placeholder}</div>
+            ) : radialModel.nodes.length === 0 && radialModel.links.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No traversal steps available for radial rendering.</div>
+            ) : (
+              <RadialGraph
+                nodes={radialModel.nodes}
+                links={radialModel.links}
+                currentNodeId={radialModel.centerId}
+                ariaLabel="Radial graph for traversal"
+                edgeColorMode="hop"
+                hopColors={HOP_COLORS}
+                legendItems={legendItems}
+                pillOpacity={0.9}
+                labelAlong={0.72}
+              />
+            )}
+          </div>
+        </TabsContent>
+        <TabsContent value="raw-json" className="mt-0">
+          <div className="max-h-[65vh] overflow-y-auto rounded-md border bg-muted/20 p-3">
+            <pre className="whitespace-pre-wrap break-words text-xs leading-relaxed">
+              {loading
+                ? "Running query..."
+                : output.response !== null
+                  ? JSON.stringify(output.response, null, 2)
+                  : placeholder}
+            </pre>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -438,10 +610,11 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
                       .join(", ")
                   : "none loaded yet"}
               </div>
-              <ToolResultPanel
+              <NodeEdgesResultPanel
                 output={nodeOutput}
                 loading={loadingKey === "node"}
                 placeholder="Run Node Edges to see results."
+                fallbackNodeId={`${nodeRing.trim()}/${nodeDocId.trim()}`}
               />
             </div>
           ) : null}
@@ -564,10 +737,11 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
                       .join(", ")
                   : "none loaded yet"}
               </div>
-              <ToolResultPanel
+              <TraverseResultPanel
                 output={traverseOutput}
                 loading={loadingKey === "traverse"}
                 placeholder="Run Traverse to see results."
+                fallbackStartNodeId={`${traverseRing.trim()}/${traverseId.trim()}`}
               />
             </div>
           ) : null}
