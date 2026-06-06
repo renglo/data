@@ -484,7 +484,7 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
       const fieldName = String(field.name);
       const sourceSpec = parseBlueprintSourceSpec((field as Record<string, unknown>).source);
       if (sourceSpec) {
-        const edgeType = `${fromBlueprint}:${fieldName}:${sourceSpec.target}:${sourceSpec.targetKey}`;
+        const edgeType = `${fromBlueprint}:${fieldName}:${sourceSpec.target}:_id`;
         const sourceLabels =
           field.source && typeof field.source === "object" && !Array.isArray(field.source)
             ? (field.source as Record<string, unknown>).label
