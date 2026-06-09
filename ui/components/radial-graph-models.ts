@@ -6,6 +6,7 @@ interface GraphEdgeRecord {
   from_node_id?: string;
   to_node_id?: string;
   projection?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
 }
 
 interface GraphNodeEdgesResponse {
@@ -36,18 +37,40 @@ function toGraphNodeEdgesResponse(input: unknown): GraphNodeEdgesResponse {
   return input as GraphNodeEdgesResponse;
 }
 
-function getNeighborLabel(edge: GraphEdgeRecord, direction: "incoming" | "outgoing", fallbackNodeId: string): string {
+function isLiteralNodeId(nodeId: string): boolean {
+  return String(nodeId || "").trim().startsWith("_literal/");
+}
+
+function getLiteralValueFromEdge(edge: GraphEdgeRecord): string | undefined {
+  const properties = edge.properties && typeof edge.properties === "object" ? edge.properties : {};
+  const value = properties.value;
+  if (value === undefined || value === null) return undefined;
+  const text = String(value).trim();
+  return text || undefined;
+}
+
+function getProjectionRoleCaption(edge: GraphEdgeRecord, role: "from" | "to"): string | undefined {
   const projection = edge.projection && typeof edge.projection === "object" ? edge.projection : {};
-  const fromName = projection["from.name"];
-  const toName = projection["to.name"];
-  const preferred = direction === "incoming" ? fromName : toName;
-  if (typeof preferred === "string" && preferred.trim()) {
-    return preferred.trim();
+  const prefix = `${role}.`;
+  const values: string[] = [];
+  for (const [key, rawValue] of Object.entries(projection).sort(([a], [b]) => a.localeCompare(b))) {
+    if (!key.startsWith(prefix)) continue;
+    if (rawValue === undefined || rawValue === null) continue;
+    const text = String(rawValue).trim();
+    if (text) values.push(text);
   }
-  const secondary = direction === "incoming" ? toName : fromName;
-  if (typeof secondary === "string" && secondary.trim()) {
-    return secondary.trim();
+  if (values.length === 0) return undefined;
+  return values.join(" ");
+}
+
+function getNeighborLabel(edge: GraphEdgeRecord, direction: "incoming" | "outgoing", fallbackNodeId: string): string {
+  if (isLiteralNodeId(fallbackNodeId)) {
+    const literalValue = getLiteralValueFromEdge(edge);
+    if (literalValue) return literalValue;
   }
+  const role = direction === "incoming" ? "from" : "to";
+  const projectionCaption = getProjectionRoleCaption(edge, role);
+  if (projectionCaption) return projectionCaption;
   return shortNodeId(fallbackNodeId);
 }
 
@@ -56,18 +79,39 @@ function getNodeLabelFromProjection(
   nodeRole: "from" | "to",
   fallbackNodeId: string,
 ): string {
-  const projection = edge.projection && typeof edge.projection === "object" ? edge.projection : {};
-  const nameKey = nodeRole === "from" ? "from.name" : "to.name";
-  const altKey = nodeRole === "from" ? "to.name" : "from.name";
-  const primary = projection[nameKey];
-  if (typeof primary === "string" && primary.trim()) {
-    return primary.trim();
+  if (isLiteralNodeId(fallbackNodeId)) {
+    const literalValue = getLiteralValueFromEdge(edge);
+    if (literalValue) return literalValue;
   }
-  const secondary = projection[altKey];
-  if (typeof secondary === "string" && secondary.trim()) {
-    return secondary.trim();
-  }
+  const projectionCaption = getProjectionRoleCaption(edge, nodeRole);
+  if (projectionCaption) return projectionCaption;
   return shortNodeId(fallbackNodeId);
+}
+
+function resolveCenterNodeLabel(
+  centerId: string,
+  incomingEdges: GraphEdgeRecord[],
+  outgoingEdges: GraphEdgeRecord[],
+): string {
+  if (isLiteralNodeId(centerId)) {
+    for (const edge of [...outgoingEdges, ...incomingEdges]) {
+      const literalValue = getLiteralValueFromEdge(edge);
+      if (literalValue) return literalValue;
+    }
+  }
+  for (const edge of outgoingEdges) {
+    const fromId = String(edge?.from_node_id || "").trim();
+    if (fromId !== centerId) continue;
+    const caption = getProjectionRoleCaption(edge, "from");
+    if (caption) return caption;
+  }
+  for (const edge of incomingEdges) {
+    const toId = String(edge?.to_node_id || "").trim();
+    if (toId !== centerId) continue;
+    const caption = getProjectionRoleCaption(edge, "to");
+    if (caption) return caption;
+  }
+  return shortNodeId(centerId);
 }
 
 export function buildNodeEdgesRadialGraphModel(
@@ -126,6 +170,15 @@ export function buildNodeEdgesRadialGraphModel(
       direction: "outgoing",
     });
   }
+
+  const centerLabel = resolveCenterNodeLabel(centerId, incomingEdges, outgoingEdges);
+  nodeMap.set(centerId, {
+    id: centerId,
+    label: centerLabel,
+    direction: "both",
+    incomingCount: incomingEdges.length,
+    outgoingCount: outgoingEdges.length,
+  });
 
   return {
     centerId,
@@ -205,22 +258,45 @@ export function buildTraverseRadialGraphModel(
     });
   }
 
-  const nodes = Array.from(nodeMap.values()).map((node) => {
-    if (node.id === centerId) return node;
-    if (traversalDirection === "backward") {
-      return { ...node, direction: "incoming" as const };
-    }
-    if (traversalDirection === "forward") {
+  const traverseEdges = steps
+    .map((step) => {
+      const stepObj = step && typeof step === "object" ? (step as Record<string, unknown>) : {};
+      const edgeObj = stepObj.edge && typeof stepObj.edge === "object"
+        ? (stepObj.edge as Record<string, unknown>)
+        : {};
+      return edgeObj as GraphEdgeRecord;
+    })
+    .filter((edge) => String(edge?.from_node_id || "").trim() && String(edge?.to_node_id || "").trim());
+
+  const incomingEdges = traverseEdges.filter((edge) => String(edge?.to_node_id || "").trim() === centerId);
+  const outgoingEdges = traverseEdges.filter((edge) => String(edge?.from_node_id || "").trim() === centerId);
+  const centerLabel = resolveCenterNodeLabel(centerId, incomingEdges, outgoingEdges);
+
+  const nodes = Array.from(nodeMap.values())
+    .filter((node) => node.id !== centerId)
+    .map((node) => {
+      if (traversalDirection === "backward") {
+        return { ...node, direction: "incoming" as const };
+      }
+      if (traversalDirection === "forward") {
+        return { ...node, direction: "outgoing" as const };
+      }
+      if (node.incomingCount > 0 && node.outgoingCount > 0) {
+        return { ...node, direction: "both" as const };
+      }
+      if (node.incomingCount > 0) {
+        return { ...node, direction: "incoming" as const };
+      }
       return { ...node, direction: "outgoing" as const };
-    }
-    if (node.incomingCount > 0 && node.outgoingCount > 0) {
-      return { ...node, direction: "both" as const };
-    }
-    if (node.incomingCount > 0) {
-      return { ...node, direction: "incoming" as const };
-    }
-    return { ...node, direction: "outgoing" as const };
-  }).filter((node) => node.id !== centerId);
+    });
+
+  nodes.push({
+    id: centerId,
+    label: centerLabel,
+    direction: "both",
+    incomingCount: incomingEdges.length,
+    outgoingCount: outgoingEdges.length,
+  });
 
   return {
     centerId,

@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useMemo, useState } from "react";
+import { Check, Copy } from "lucide-react";
 
 export type RadialDirection = "incoming" | "outgoing" | "both";
 
@@ -77,6 +78,14 @@ function getBlueprintNameFromNodeId(nodeId: string): string {
   return blueprintName && blueprintName.trim() ? blueprintName.trim() : "unknown";
 }
 
+function isLiteralNodeId(nodeId: string): boolean {
+  return String(nodeId || "").trim().startsWith("_literal/");
+}
+
+function isLiteralLink(link: RadialGraphLink): boolean {
+  return isLiteralNodeId(link.sourceId) || isLiteralNodeId(link.targetId);
+}
+
 function clampLabel(raw: string, maxLength = 22): string {
   const value = String(raw || "").trim();
   if (!value) return "Unnamed";
@@ -126,15 +135,35 @@ export default function RadialGraph({
   const graphCanvasHeight = 560;
   const markerIdPrefix = useId().replace(/:/g, "");
   const [selectedRadialNodeId, setSelectedRadialNodeId] = useState<string | null>(null);
+  const [copiedNodeId, setCopiedNodeId] = useState<string | null>(null);
+  const [showLiteralEdges, setShowLiteralEdges] = useState(false);
+
+  const copyNodeId = async (nodeId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(nodeId);
+      setCopiedNodeId(nodeId);
+      window.setTimeout(() => {
+        setCopiedNodeId((current) => (current === nodeId ? null : current));
+      }, 1500);
+    } catch {
+      // Clipboard access can fail outside secure contexts.
+    }
+  };
+
+  const visibleLinks = useMemo(
+    () => (showLiteralEdges ? links : links.filter((link) => !isLiteralLink(link))),
+    [links, showLiteralEdges],
+  );
 
   const centerIncomingCount = useMemo(
-    () => links.filter((link) => link.targetId === currentNodeId).length,
-    [links, currentNodeId],
+    () => visibleLinks.filter((link) => link.targetId === currentNodeId).length,
+    [visibleLinks, currentNodeId],
   );
 
   const centerOutgoingCount = useMemo(
-    () => links.filter((link) => link.sourceId === currentNodeId).length,
-    [links, currentNodeId],
+    () => visibleLinks.filter((link) => link.sourceId === currentNodeId).length,
+    [visibleLinks, currentNodeId],
   );
 
   const displayNodes = useMemo<RadialGraphNode[]>(() => {
@@ -151,8 +180,18 @@ export default function RadialGraph({
         outgoingCount: 0,
       });
     }
-    return Array.from(nodeMap.values());
-  }, [nodes, currentNodeId]);
+
+    if (showLiteralEdges) {
+      return Array.from(nodeMap.values());
+    }
+
+    const connectedNodeIds = new Set<string>([currentNodeId]);
+    for (const link of visibleLinks) {
+      connectedNodeIds.add(link.sourceId);
+      connectedNodeIds.add(link.targetId);
+    }
+    return Array.from(nodeMap.values()).filter((node) => connectedNodeIds.has(node.id));
+  }, [nodes, currentNodeId, showLiteralEdges, visibleLinks]);
 
   const radialLayout = useMemo(
     () => layoutRadialNodes(displayNodes, graphCanvasWidth, graphCanvasHeight),
@@ -193,6 +232,12 @@ export default function RadialGraph({
     setSelectedRadialNodeId(null);
   }, [nodes, links, currentNodeId]);
 
+  useEffect(() => {
+    if (selectedRadialNodeId && !displayNodes.some((node) => node.id === selectedRadialNodeId)) {
+      setSelectedRadialNodeId(null);
+    }
+  }, [displayNodes, selectedRadialNodeId]);
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
@@ -202,6 +247,14 @@ export default function RadialGraph({
             {item.label}
           </span>
         ))}
+        <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
+          <input
+            type="checkbox"
+            checked={showLiteralEdges}
+            onChange={(event) => setShowLiteralEdges(event.target.checked)}
+          />
+          Show literal edges
+        </label>
       </div>
       <svg
         viewBox={`0 0 ${graphCanvasWidth} ${graphCanvasHeight}`}
@@ -238,7 +291,7 @@ export default function RadialGraph({
           )}
         </defs>
 
-        {links.map((link) => {
+        {visibleLinks.map((link) => {
           const source = radialNodesById.get(link.sourceId);
           const target = radialNodesById.get(link.targetId);
           if (!source || !target) return null;
@@ -297,25 +350,38 @@ export default function RadialGraph({
 
         {radialLayout.map((node) => {
           const isCurrent = node.id === currentNodeId;
+          const isLiteral = isLiteralNodeId(node.id);
           const fill = isCurrent
             ? "#8a6df6"
-            : node.direction === "incoming"
-              ? "#4f8dfd"
-              : node.direction === "outgoing"
-                ? "#36c995"
-                : "#8a6df6";
+            : isLiteral
+              ? "#a8c547"
+              : node.direction === "incoming"
+                ? "#4f8dfd"
+                : node.direction === "outgoing"
+                  ? "#36c995"
+                  : "#8a6df6";
           const stroke = isCurrent
             ? "#6f55dc"
-            : node.direction === "incoming"
-              ? "#2f66d8"
-              : node.direction === "outgoing"
-                ? "#239d74"
-                : "#6f55dc";
+            : isLiteral
+              ? "#7a9a2e"
+              : node.direction === "incoming"
+                ? "#2f66d8"
+                : node.direction === "outgoing"
+                  ? "#239d74"
+                  : "#6f55dc";
           const blueprintName = getBlueprintNameFromNodeId(node.id);
+          const copyButtonSize = 14;
           const pillWidth = Math.max(54, blueprintName.length * 6.6 + 14);
           const pillHeight = 18;
           const pillX = node.x - (pillWidth / 2);
           const pillY = node.y - 43;
+          const pillFill = isCurrent ? "#ede9fe" : isLiteral ? "#f4fce3" : "#eff6ff";
+          const pillStroke = isCurrent ? "#8b5cf6" : isLiteral ? "#a8c547" : "#60a5fa";
+          const pillTextClass = isCurrent
+            ? "fill-[#5b21b6]"
+            : isLiteral
+              ? "fill-[#4d7c0f]"
+              : "fill-[#1e3a8a]";
           return (
             <g key={node.id}>
               <rect
@@ -324,16 +390,16 @@ export default function RadialGraph({
                 width={pillWidth}
                 height={pillHeight}
                 rx={pillHeight / 2}
-                fill={isCurrent ? "#ede9fe" : "#eff6ff"}
+                fill={pillFill}
                 fillOpacity={pillOpacity}
-                stroke={isCurrent ? "#8b5cf6" : "#60a5fa"}
+                stroke={pillStroke}
                 strokeWidth={1}
               />
               <text
                 x={node.x}
                 y={pillY + 12.5}
                 textAnchor="middle"
-                className={`pointer-events-none text-[10px] font-semibold ${isCurrent ? "fill-[#5b21b6]" : "fill-[#1e3a8a]"}`}
+                className={`pointer-events-none text-[10px] font-semibold ${pillTextClass}`}
               >
                 {blueprintName}
               </text>
@@ -360,6 +426,27 @@ export default function RadialGraph({
               >
                 {fitCircleLabel(node.label, 8)}
               </text>
+              <foreignObject
+                x={node.x - (copyButtonSize / 2)}
+                y={node.y + 30}
+                width={copyButtonSize}
+                height={copyButtonSize}
+                className="overflow-visible"
+              >
+                <button
+                  type="button"
+                  onClick={(event) => void copyNodeId(node.id, event)}
+                  className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white/95 text-slate-600 shadow-sm transition-colors hover:bg-white hover:text-slate-900"
+                  title="Copy node ID"
+                  aria-label="Copy node ID"
+                >
+                  {copiedNodeId === node.id ? (
+                    <Check className="h-3 w-3" />
+                  ) : (
+                    <Copy className="h-3 w-3" />
+                  )}
+                </button>
+              </foreignObject>
             </g>
           );
         })}

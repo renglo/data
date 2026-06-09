@@ -55,6 +55,27 @@ const toUpperSnake = (raw: string): string =>
     .replace(/^_+|_+$/g, "")
     .toUpperCase();
 
+function parseNodeRef(raw: string): { ring: string; id: string; nodeId: string } {
+  const value = String(raw || "").trim();
+  if (!value) {
+    throw new Error("Node is required.");
+  }
+  const slashIndex = value.indexOf("/");
+  if (slashIndex <= 0 || slashIndex === value.length - 1) {
+    throw new Error(
+      'Enter a node as "ring/id", e.g. infrastructure_elements/77785e68-c607-4eac-8ac7-ab17c9900825.',
+    );
+  }
+  const ring = value.slice(0, slashIndex).trim();
+  const id = value.slice(slashIndex + 1).trim();
+  if (!ring || !id) {
+    throw new Error(
+      'Enter a node as "ring/id", e.g. infrastructure_elements/77785e68-c607-4eac-8ac7-ab17c9900825.',
+    );
+  }
+  return { ring, id, nodeId: `${ring}/${id}` };
+}
+
 const HOP_COLORS = [
   "#BD33A3", // hop 1: purple
   "#FF4C00", // hop 2: orange
@@ -253,16 +274,14 @@ function TraverseResultPanel({
 
 export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
   const [activeTab, setActiveTab] = useState<"node" | "type" | "traverse">("node");
-  const [nodeRing, setNodeRing] = useState("");
-  const [nodeDocId, setNodeDocId] = useState("");
+  const [nodeRef, setNodeRef] = useState("");
   const [nodeLimit, setNodeLimit] = useState("100");
   const [inferredNodeEdgeTypes, setInferredNodeEdgeTypes] = useState<EdgeDefinition[]>([]);
 
   const [typeEdgeType, setTypeEdgeType] = useState("");
   const [typeLimit, setTypeLimit] = useState("100");
 
-  const [traverseRing, setTraverseRing] = useState("");
-  const [traverseId, setTraverseId] = useState("");
+  const [traverseNodeRef, setTraverseNodeRef] = useState("");
   const [direction, setDirection] = useState("forward");
   const [maxDepth, setMaxDepth] = useState("3");
   const [inferredTraverseEdgeTypes, setInferredTraverseEdgeTypes] = useState<EdgeDefinition[]>([]);
@@ -364,12 +383,7 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
     setLoadingKey("node");
     setNodeOutput((prev) => ({ ...prev, error: "", response: null }));
     try {
-      const ring = nodeRing.trim();
-      const idx = nodeDocId.trim();
-      if (!ring || !idx) {
-        throw new Error("ring and id are required.");
-      }
-      const node = `${ring}/${idx}`;
+      const { ring, nodeId: node } = parseNodeRef(nodeRef);
       const inferred = await inferEdgeDefinitionsFromBlueprint(ring);
       setInferredNodeEdgeTypes(inferred);
       const aliasMap = buildAliasMap(inferred);
@@ -421,16 +435,11 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
     setLoadingKey("traverse");
     setTraverseOutput((prev) => ({ ...prev, error: "", response: null }));
     try {
-      const ring = traverseRing.trim();
-      const idx = traverseId.trim();
-      if (!ring || !idx) {
-        throw new Error("ring and id are required for traversal.");
-      }
+      const { ring, nodeId } = parseNodeRef(traverseNodeRef);
 
       const inferred = await inferEdgeDefinitionsFromBlueprint(ring);
       setInferredTraverseEdgeTypes(inferred);
       const aliasMap = buildAliasMap(inferred);
-      const nodeId = `${ring}/${idx}`;
 
       const { url, body } = await fetchGraph("traverse", {
         node_id: nodeId,
@@ -567,16 +576,16 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
                 `source` (`&lt;blueprint_from&gt;:&lt;field_from&gt;:&lt;blueprint_to&gt;:&lt;field_to&gt;`).
               </p>
               <p className="text-xs text-muted-foreground">
-                Example: `ring=noma_travel_preferences`, `id=123e4567`, `limit=50`.
+                Example: `infrastructure_elements/77785e68-c607-4eac-8ac7-ab17c9900825`, `limit=50`.
               </p>
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium">Ring</label>
-                  <Input value={nodeRing} onChange={(e) => setNodeRing(e.target.value)} placeholder="e.g. noma_travel_preferences" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium">ID</label>
-                  <Input value={nodeDocId} onChange={(e) => setNodeDocId(e.target.value)} placeholder="e.g. 123e4567" />
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                <div className="space-y-1 md:col-span-1">
+                  <label className="text-xs font-medium">Node</label>
+                  <Input
+                    value={nodeRef}
+                    onChange={(e) => setNodeRef(e.target.value)}
+                    placeholder="e.g. infrastructure_elements/77785e68-c607-4eac-8ac7-ab17c9900825"
+                  />
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-medium">Limit</label>
@@ -614,7 +623,7 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
                 output={nodeOutput}
                 loading={loadingKey === "node"}
                 placeholder="Run Node Edges to see results."
-                fallbackNodeId={`${nodeRing.trim()}/${nodeDocId.trim()}`}
+                fallbackNodeId={nodeRef.trim()}
               />
             </div>
           ) : null}
@@ -672,22 +681,17 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
                 Forward and backward modes discover edges per hop (outgoing vs incoming) so depth is not limited to the start node blueprint.
               </p>
               <p className="text-xs text-muted-foreground">
-                Example: `ring=noma_travel_preferences`, `id=123e4567`, `direction=forward`, `max_depth=2`.
+                Example: `infrastructure_elements/77785e68-c607-4eac-8ac7-ab17c9900825`, `direction=forward`, `max_depth=2`.
               </p>
 
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                 <div className="space-y-1">
-                  <label className="text-xs font-medium">Ring</label>
+                  <label className="text-xs font-medium">Node</label>
                   <Input
-                    value={traverseRing}
-                    onChange={(e) => setTraverseRing(e.target.value)}
-                    placeholder="e.g. noma_travel_preferences"
+                    value={traverseNodeRef}
+                    onChange={(e) => setTraverseNodeRef(e.target.value)}
+                    placeholder="e.g. infrastructure_elements/77785e68-c607-4eac-8ac7-ab17c9900825"
                   />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-medium">ID</label>
-                  <Input value={traverseId} onChange={(e) => setTraverseId(e.target.value)} placeholder="e.g. 123e4567" />
                 </div>
 
                 <div className="space-y-1">
@@ -741,7 +745,7 @@ export default function GraphExplorer({ portfolio, org }: GraphExplorerProps) {
                 output={traverseOutput}
                 loading={loadingKey === "traverse"}
                 placeholder="Run Traverse to see results."
-                fallbackStartNodeId={`${traverseRing.trim()}/${traverseId.trim()}`}
+                fallbackStartNodeId={traverseNodeRef.trim()}
               />
             </div>
           ) : null}
