@@ -17,7 +17,6 @@ import {
   EllipsisVertical,
   FileJson2,
   LibraryBig,
-  RefreshCw,
 } from "lucide-react"
 
 //import { NavLink } from 'react-router-dom';
@@ -53,8 +52,6 @@ export default function ToolDataCRUD({ readonly, portfolio, org, tool, ring }: T
     const [selectedId, setSelectedId] = useState<string>('');
     const [deletedId, setDeletedId] = useState<string | null>(null);
     const [refresh, setRefresh] = useState(false);
-    /** Bumps ItemPreview `key` so the selected document is re-fetched without reloading the table. */
-    const [previewFetchKey, setPreviewFetchKey] = useState(0);
     const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
     const [error, setError] = useState<Error | null>(null);
 
@@ -71,11 +68,9 @@ export default function ToolDataCRUD({ readonly, portfolio, org, tool, ring }: T
             });
             const blueprintData = await blueprintResponse.json();
             setBlueprint(blueprintData);
-            
-            setRefresh(prev => !prev);
     
             // After fetching blueprint, run overloadBlueprint
-            const updatedBlueprint = await overloadBlueprint(blueprintData, portfolio, org);
+            const updatedBlueprint = await overloadBlueprint(blueprintData, portfolio, org, { eagerLoadSources: false });
             if (updatedBlueprint) {
                 setBlueprint(updatedBlueprint);
             }
@@ -145,7 +140,6 @@ export default function ToolDataCRUD({ readonly, portfolio, org, tool, ring }: T
     // Function to handle the selected id passed from the child component
     const handleSelectId = (id: string) => {
       setSelectedId(id);
-      setPreviewFetchKey(0);
       if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
         setMobilePreviewOpen(true);
       }
@@ -154,14 +148,8 @@ export default function ToolDataCRUD({ readonly, portfolio, org, tool, ring }: T
     const handleDeleteId = (id: string) => {
         if (selectedId === id) {
           setSelectedId('');
-          setPreviewFetchKey(0);
         }
         setDeletedId(id);
-    };
-
-    const refreshSelectedDocument = () => {
-      if (!selectedId) return;
-      setPreviewFetchKey((k) => k + 1);
     };
 
     // Function to update the state
@@ -174,8 +162,8 @@ export default function ToolDataCRUD({ readonly, portfolio, org, tool, ring }: T
     return (
 
             
-        <main className="grid flex-1 items-stretch gap-4 p-4 sm:px-6 sm:py-0 md:gap-6 lg:grid-cols-2">
-            <div className="grid min-w-0 auto-rows-max items-start gap-4 md:gap-6">
+        <main className="grid w-full min-w-0 flex-1 items-stretch gap-4 overflow-x-hidden p-4 sm:px-6 sm:py-0 md:gap-6 lg:grid-cols-[minmax(0,1fr)_clamp(18rem,33vw,42rem)]">
+            <div className="grid min-w-0 overflow-hidden auto-rows-max items-start gap-4 md:gap-6">
 
                 <nav className="ml-auto flex items-center gap-2 hidden">
                   
@@ -258,8 +246,8 @@ export default function ToolDataCRUD({ readonly, portfolio, org, tool, ring }: T
                 </div>
 
              
-                <div className="flex min-h-0 h-[calc(100vh-16rem)] flex-col lg:h-[calc(100vh-14rem)]">
-                  <Card className="flex min-h-0 flex-1 flex-col">
+                <div className="flex min-h-0 min-w-0 h-[calc(100vh-16rem)] flex-col lg:h-[calc(100vh-14rem)]">
+                  <Card className="flex min-h-0 min-w-0 flex-1 flex-col">
                       <CardHeader className="shrink-0 px-3 pb-2 pt-3 sm:px-6 lg:px-0 lg:pt-0">
                         <div className="flex items-center justify-end lg:hidden">
                           <Dialog open={mobilePreviewOpen} onOpenChange={setMobilePreviewOpen}>
@@ -282,22 +270,9 @@ export default function ToolDataCRUD({ readonly, portfolio, org, tool, ring }: T
                                   {selectedId ? `Document ${selectedId}` : "Selected document"}
                                 </DialogTitle>
                               </DialogHeader>
-                              <div className="flex shrink-0 justify-end">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="gap-1.5"
-                                  disabled={!selectedId}
-                                  onClick={refreshSelectedDocument}
-                                >
-                                  <RefreshCw className="h-3.5 w-3.5" />
-                                  Refresh
-                                </Button>
-                              </div>
                               <div className="min-h-0 flex-1 overflow-auto">
                                 <ItemPreview
-                                  key={`${selectedId}:${previewFetchKey}:mobile`}
+                                  key={`${selectedId}:mobile`}
                                   selectedId={selectedId}
                                   refreshUp={refreshAction}
                                   onDeleteId={handleDeleteId}
@@ -311,7 +286,7 @@ export default function ToolDataCRUD({ readonly, portfolio, org, tool, ring }: T
                           </Dialog>
                         </div>
                       </CardHeader>
-                      <CardContent className="flex min-h-0 flex-1 flex-col px-3 pb-3 pt-0 sm:px-6">
+                      <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col px-3 pb-3 pt-0 sm:px-6">
                       <DataTable
                           onSelectId={handleSelectId}
                           selectedId={selectedId}
@@ -329,24 +304,10 @@ export default function ToolDataCRUD({ readonly, portfolio, org, tool, ring }: T
                   
                 
             </div>
-            <div className="sticky top-5 hidden h-[calc(100vh-5rem-20px)] min-h-0 flex-col gap-2 lg:flex">
-                <div className="flex shrink-0 justify-end">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="gap-1.5"
-                    disabled={!selectedId}
-                    onClick={refreshSelectedDocument}
-                    title={selectedId ? "Reload this document from the server" : undefined}
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    Refresh
-                  </Button>
-                </div>
+            <div className="sticky top-5 z-10 hidden h-[calc(100vh-5rem-20px)] min-h-0 w-full min-w-0 flex-col bg-background lg:flex">
                 <div className="min-h-0 flex-1 flex flex-col">
                 <ItemPreview 
-                   key={`${selectedId}:${previewFetchKey}`}
+                   key={selectedId}
                    selectedId={selectedId} 
                    refreshUp={refreshAction}
                    onDeleteId={handleDeleteId}
