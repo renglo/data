@@ -1,4 +1,4 @@
-import type { RadialGraphLink, RadialGraphNode } from "./radial-graph";
+import type { RadialGraphLink, RadialGraphNode, RadialGraphNodeDetails } from "./radial-graph";
 
 interface GraphEdgeRecord {
   edge_label?: string;
@@ -7,6 +7,7 @@ interface GraphEdgeRecord {
   to_node_id?: string;
   projection?: Record<string, unknown>;
   properties?: Record<string, unknown>;
+  qualifiers?: Record<string, unknown>;
 }
 
 interface GraphNodeEdgesResponse {
@@ -38,7 +39,8 @@ function toGraphNodeEdgesResponse(input: unknown): GraphNodeEdgesResponse {
 }
 
 function isLiteralNodeId(nodeId: string): boolean {
-  return String(nodeId || "").trim().startsWith("_literal/");
+  const value = String(nodeId || "").trim();
+  return value.startsWith("_literal/") || value.startsWith("_dangling/");
 }
 
 function getLiteralValueFromEdge(edge: GraphEdgeRecord): string | undefined {
@@ -47,6 +49,79 @@ function getLiteralValueFromEdge(edge: GraphEdgeRecord): string | undefined {
   if (value === undefined || value === null) return undefined;
   const text = String(value).trim();
   return text || undefined;
+}
+
+function formatDetailValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value).trim();
+}
+
+function projectionEntriesForRole(
+  projection: Record<string, unknown> | undefined,
+  role: "from" | "to",
+): Record<string, string> {
+  const prefix = `${role}.`;
+  const entries: Record<string, string> = {};
+  if (!projection || typeof projection !== "object") return entries;
+  for (const [key, rawValue] of Object.entries(projection).sort(([a], [b]) => a.localeCompare(b))) {
+    if (!key.startsWith(prefix)) continue;
+    const text = formatDetailValue(rawValue);
+    if (text) entries[key] = text;
+  }
+  return entries;
+}
+
+function qualifierEntries(qualifiers: Record<string, unknown> | undefined): Record<string, string> {
+  const entries: Record<string, string> = {};
+  if (!qualifiers || typeof qualifiers !== "object") return entries;
+  for (const [key, rawValue] of Object.entries(qualifiers).sort(([a], [b]) => a.localeCompare(b))) {
+    const text = formatDetailValue(rawValue);
+    if (text) entries[key] = text;
+  }
+  return entries;
+}
+
+function mergeNodeDetails(
+  existing: RadialGraphNodeDetails | undefined,
+  incoming: RadialGraphNodeDetails,
+): RadialGraphNodeDetails {
+  return {
+    projection: { ...(existing?.projection ?? {}), ...incoming.projection },
+    qualifiers: { ...(existing?.qualifiers ?? {}), ...incoming.qualifiers },
+  };
+}
+
+function edgeDetailsForNode(edge: GraphEdgeRecord, role: "from" | "to"): RadialGraphNodeDetails {
+  return {
+    projection: projectionEntriesForRole(edge.projection, role),
+    qualifiers: qualifierEntries(edge.qualifiers),
+  };
+}
+
+function upsertNode(
+  nodeMap: Map<string, RadialGraphNode>,
+  nodeId: string,
+  patch: Partial<RadialGraphNode> & { details?: RadialGraphNodeDetails },
+): void {
+  const existing = nodeMap.get(nodeId);
+  const mergedDetails = patch.details
+    ? mergeNodeDetails(existing?.details, patch.details)
+    : existing?.details;
+  nodeMap.set(nodeId, {
+    id: nodeId,
+    label: patch.label ?? existing?.label ?? shortNodeId(nodeId),
+    direction: patch.direction ?? existing?.direction ?? "both",
+    incomingCount: patch.incomingCount ?? existing?.incomingCount ?? 0,
+    outgoingCount: patch.outgoingCount ?? existing?.outgoingCount ?? 0,
+    details: mergedDetails,
+  });
 }
 
 function getProjectionRoleCaption(edge: GraphEdgeRecord, role: "from" | "to"): string | undefined {
@@ -131,12 +206,15 @@ export function buildNodeEdgesRadialGraphModel(
     if (!sourceId) continue;
     const existing = nodeMap.get(sourceId);
     const label = getNeighborLabel(edge, "incoming", sourceId);
-    nodeMap.set(sourceId, {
-      id: sourceId,
+    upsertNode(nodeMap, sourceId, {
       label: existing?.label || label,
       direction: existing?.direction === "outgoing" || existing?.direction === "both" ? "both" : "incoming",
       incomingCount: (existing?.incomingCount || 0) + 1,
       outgoingCount: existing?.outgoingCount || 0,
+      details: edgeDetailsForNode(edge, "from"),
+    });
+    upsertNode(nodeMap, centerId, {
+      details: edgeDetailsForNode(edge, "to"),
     });
     links.push({
       id: `in-${sourceId}-${targetId}-${links.length}`,
@@ -154,12 +232,15 @@ export function buildNodeEdgesRadialGraphModel(
     if (!targetId) continue;
     const existing = nodeMap.get(targetId);
     const label = getNeighborLabel(edge, "outgoing", targetId);
-    nodeMap.set(targetId, {
-      id: targetId,
+    upsertNode(nodeMap, targetId, {
       label: existing?.label || label,
       direction: existing?.direction === "incoming" || existing?.direction === "both" ? "both" : "outgoing",
       incomingCount: existing?.incomingCount || 0,
       outgoingCount: (existing?.outgoingCount || 0) + 1,
+      details: edgeDetailsForNode(edge, "to"),
+    });
+    upsertNode(nodeMap, centerId, {
+      details: edgeDetailsForNode(edge, "from"),
     });
     links.push({
       id: `out-${sourceId}-${targetId}-${links.length}`,
@@ -172,8 +253,7 @@ export function buildNodeEdgesRadialGraphModel(
   }
 
   const centerLabel = resolveCenterNodeLabel(centerId, incomingEdges, outgoingEdges);
-  nodeMap.set(centerId, {
-    id: centerId,
+  upsertNode(nodeMap, centerId, {
     label: centerLabel,
     direction: "both",
     incomingCount: incomingEdges.length,
@@ -219,8 +299,7 @@ export function buildTraverseRadialGraphModel(
     const fromExisting = nodeMap.get(fromId);
     const toExisting = nodeMap.get(toId);
 
-    nodeMap.set(fromId, {
-      id: fromId,
+    upsertNode(nodeMap, fromId, {
       label: fromExisting?.label || getNodeLabelFromProjection(edge, "from", fromId),
       direction:
         (fromExisting?.incomingCount || 0) > 0 || (fromExisting?.outgoingCount || 0) + 1 > 0
@@ -228,10 +307,10 @@ export function buildTraverseRadialGraphModel(
           : "outgoing",
       incomingCount: fromExisting?.incomingCount || 0,
       outgoingCount: (fromExisting?.outgoingCount || 0) + 1,
+      details: edgeDetailsForNode(edge, "from"),
     });
 
-    nodeMap.set(toId, {
-      id: toId,
+    upsertNode(nodeMap, toId, {
       label: toExisting?.label || getNodeLabelFromProjection(edge, "to", toId),
       direction:
         (toExisting?.outgoingCount || 0) > 0 || (toExisting?.incomingCount || 0) + 1 > 0
@@ -239,6 +318,7 @@ export function buildTraverseRadialGraphModel(
           : "incoming",
       incomingCount: (toExisting?.incomingCount || 0) + 1,
       outgoingCount: toExisting?.outgoingCount || 0,
+      details: edgeDetailsForNode(edge, "to"),
     });
 
     const edgeType = String(edge?.edge_type || "");
@@ -272,30 +352,30 @@ export function buildTraverseRadialGraphModel(
   const outgoingEdges = traverseEdges.filter((edge) => String(edge?.from_node_id || "").trim() === centerId);
   const centerLabel = resolveCenterNodeLabel(centerId, incomingEdges, outgoingEdges);
 
-  const nodes = Array.from(nodeMap.values())
-    .filter((node) => node.id !== centerId)
-    .map((node) => {
-      if (traversalDirection === "backward") {
-        return { ...node, direction: "incoming" as const };
-      }
-      if (traversalDirection === "forward") {
-        return { ...node, direction: "outgoing" as const };
-      }
-      if (node.incomingCount > 0 && node.outgoingCount > 0) {
-        return { ...node, direction: "both" as const };
-      }
-      if (node.incomingCount > 0) {
-        return { ...node, direction: "incoming" as const };
-      }
-      return { ...node, direction: "outgoing" as const };
-    });
-
-  nodes.push({
-    id: centerId,
+  upsertNode(nodeMap, centerId, {
     label: centerLabel,
     direction: "both",
     incomingCount: incomingEdges.length,
     outgoingCount: outgoingEdges.length,
+  });
+
+  const nodes = Array.from(nodeMap.values()).map((node) => {
+    if (node.id === centerId) {
+      return node;
+    }
+    if (traversalDirection === "backward") {
+      return { ...node, direction: "incoming" as const };
+    }
+    if (traversalDirection === "forward") {
+      return { ...node, direction: "outgoing" as const };
+    }
+    if (node.incomingCount > 0 && node.outgoingCount > 0) {
+      return { ...node, direction: "both" as const };
+    }
+    if (node.incomingCount > 0) {
+      return { ...node, direction: "incoming" as const };
+    }
+    return { ...node, direction: "outgoing" as const };
   });
 
   return {
