@@ -3,12 +3,18 @@ import { Check, Copy } from "lucide-react";
 
 export type RadialDirection = "incoming" | "outgoing" | "both";
 
+export interface RadialGraphNodeDetails {
+  projection: Record<string, string>;
+  qualifiers: Record<string, string>;
+}
+
 export interface RadialGraphNode {
   id: string;
   label: string;
   direction: RadialDirection;
   incomingCount: number;
   outgoingCount: number;
+  details?: RadialGraphNodeDetails;
 }
 
 export interface RadialGraphLink {
@@ -36,8 +42,118 @@ interface SelectedRadialNodeInfo {
   label: string;
   incomingCount: number;
   outgoingCount: number;
+  details?: RadialGraphNodeDetails;
   x: number;
   y: number;
+}
+
+function truncateDetailText(text: string, maxLength = 56): string {
+  const value = String(text ?? "").trim();
+  if (!value) return "—";
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1)}…`;
+}
+
+function detailRows(record: Record<string, string> | undefined): [string, string][] {
+  if (!record) return [];
+  return Object.entries(record)
+    .filter(([, value]) => String(value ?? "").trim().length > 0)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => [key, truncateDetailText(value)]);
+}
+
+function NodeDetailTooltip({
+  node,
+  x,
+  y,
+  canvasWidth,
+  canvasHeight,
+}: {
+  node: SelectedRadialNodeInfo;
+  x: number;
+  y: number;
+  canvasWidth: number;
+  canvasHeight: number;
+}) {
+  const tooltipWidth = 320;
+  const projectionRows = detailRows(node.details?.projection);
+  const qualifierRows = detailRows(node.details?.qualifiers);
+  const sectionCount = (projectionRows.length > 0 ? 1 : 0) + (qualifierRows.length > 0 ? 1 : 0);
+  const rowCount = projectionRows.length + qualifierRows.length;
+  const tooltipHeight = Math.min(
+    280,
+    92 + sectionCount * 18 + rowCount * 22,
+  );
+  const rawX = x + 18;
+  const rawY = y - tooltipHeight - 16;
+  const tooltipX = Math.max(10, Math.min(rawX, canvasWidth - tooltipWidth - 10));
+  const tooltipY = Math.max(10, Math.min(rawY, canvasHeight - tooltipHeight - 10));
+
+  return (
+    <foreignObject
+      x={tooltipX}
+      y={tooltipY}
+      width={tooltipWidth}
+      height={tooltipHeight}
+      className="overflow-visible"
+    >
+      <div
+        xmlns="http://www.w3.org/1999/xhtml"
+        className="max-h-full overflow-y-auto rounded-lg border border-slate-600 bg-slate-900/95 p-3 text-xs text-slate-100 shadow-lg"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="font-semibold text-[13px] text-white">{truncateDetailText(node.label, 40)}</div>
+        <div className="mt-1 break-all text-[10px] text-slate-300">{truncateDetailText(node.id, 72)}</div>
+        <div className="mt-1 text-[10px] text-slate-400">
+          {`${node.incomingCount} incoming / ${node.outgoingCount} outgoing`}
+        </div>
+
+        {projectionRows.length > 0 ? (
+          <div className="mt-3">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              Projection
+            </div>
+            <table className="w-full table-fixed border-collapse text-[10px]">
+              <tbody>
+                {projectionRows.map(([key, value]) => (
+                  <tr key={`proj-${key}`} className="border-t border-slate-700/80">
+                    <td className="w-[42%] break-all py-1 pr-2 align-top font-medium text-slate-300">
+                      {truncateDetailText(key, 30)}
+                    </td>
+                    <td className="break-all py-1 align-top text-slate-100">{value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {qualifierRows.length > 0 ? (
+          <div className="mt-3">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              Qualifiers
+            </div>
+            <table className="w-full table-fixed border-collapse text-[10px]">
+              <tbody>
+                {qualifierRows.map(([key, value]) => (
+                  <tr key={`qual-${key}`} className="border-t border-slate-700/80">
+                    <td className="w-[42%] break-all py-1 pr-2 align-top font-medium text-slate-300">
+                      {truncateDetailText(key, 30)}
+                    </td>
+                    <td className="break-all py-1 align-top text-slate-100">{value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {projectionRows.length === 0 && qualifierRows.length === 0 ? (
+          <div className="mt-3 text-[10px] text-slate-400">No projection or qualifier metadata for this node.</div>
+        ) : null}
+      </div>
+    </foreignObject>
+  );
 }
 
 interface RadialGraphProps {
@@ -79,11 +195,20 @@ function getBlueprintNameFromNodeId(nodeId: string): string {
 }
 
 function isLiteralNodeId(nodeId: string): boolean {
-  return String(nodeId || "").trim().startsWith("_literal/");
+  const value = String(nodeId || "").trim();
+  return value.startsWith("_literal/");
+}
+
+function isDanglingNodeId(nodeId: string): boolean {
+  return String(nodeId || "").trim().startsWith("_dangling/");
 }
 
 function isLiteralLink(link: RadialGraphLink): boolean {
   return isLiteralNodeId(link.sourceId) || isLiteralNodeId(link.targetId);
+}
+
+function isDanglingLink(link: RadialGraphLink): boolean {
+  return isDanglingNodeId(link.sourceId) || isDanglingNodeId(link.targetId);
 }
 
 function clampLabel(raw: string, maxLength = 22): string {
@@ -137,6 +262,7 @@ export default function RadialGraph({
   const [selectedRadialNodeId, setSelectedRadialNodeId] = useState<string | null>(null);
   const [copiedNodeId, setCopiedNodeId] = useState<string | null>(null);
   const [showLiteralEdges, setShowLiteralEdges] = useState(false);
+  const [showDanglingEdges, setShowDanglingEdges] = useState(true);
 
   const copyNodeId = async (nodeId: string, event: React.MouseEvent) => {
     event.stopPropagation();
@@ -152,8 +278,13 @@ export default function RadialGraph({
   };
 
   const visibleLinks = useMemo(
-    () => (showLiteralEdges ? links : links.filter((link) => !isLiteralLink(link))),
-    [links, showLiteralEdges],
+    () =>
+      links.filter((link) => {
+        if (!showDanglingEdges && isDanglingLink(link)) return false;
+        if (!showLiteralEdges && isLiteralLink(link)) return false;
+        return true;
+      }),
+    [links, showDanglingEdges, showLiteralEdges],
   );
 
   const centerIncomingCount = useMemo(
@@ -212,6 +343,7 @@ export default function RadialGraph({
       label: node.label,
       incomingCount: node.id === currentNodeId ? centerIncomingCount : node.incomingCount,
       outgoingCount: node.id === currentNodeId ? centerOutgoingCount : node.outgoingCount,
+      details: node.details,
       x: node.x,
       y: node.y,
     };
@@ -255,6 +387,14 @@ export default function RadialGraph({
           />
           Show literal edges
         </label>
+        <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
+          <input
+            type="checkbox"
+            checked={showDanglingEdges}
+            onChange={(event) => setShowDanglingEdges(event.target.checked)}
+          />
+          Show dangling edges
+        </label>
       </div>
       <svg
         viewBox={`0 0 ${graphCanvasWidth} ${graphCanvasHeight}`}
@@ -271,6 +411,9 @@ export default function RadialGraph({
               </marker>
               <marker id={`${markerIdPrefix}-outgoing-arrow`} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
                 <path d="M0,0 L0,8 L8,4 z" fill="#52d39f" />
+              </marker>
+              <marker id={`${markerIdPrefix}-dangling-arrow`} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L0,8 L8,4 z" fill="#dc2626" />
               </marker>
             </>
           ) : (
@@ -295,7 +438,9 @@ export default function RadialGraph({
           const source = radialNodesById.get(link.sourceId);
           const target = radialNodesById.get(link.targetId);
           if (!source || !target) return null;
-          const lineColor = edgeColorMode === "hop"
+          const lineColor = isDanglingLink(link)
+            ? "#dc2626"
+            : edgeColorMode === "hop"
             ? getHopColor(link.hop || 1, hopColors)
             : link.direction === "incoming"
               ? "#5f95ff"
@@ -319,6 +464,8 @@ export default function RadialGraph({
           const labelY = anchorY + perpY * 8;
           const markerEnd = edgeColorMode === "hop"
             ? `url(#${markerIdPrefix}-hop-arrow-${((Math.max(1, link.hop || 1) - 1) % hopColors.length) + 1})`
+            : isDanglingLink(link)
+              ? `url(#${markerIdPrefix}-dangling-arrow)`
             : link.direction === "incoming"
               ? `url(#${markerIdPrefix}-incoming-arrow)`
               : `url(#${markerIdPrefix}-outgoing-arrow)`;
@@ -351,8 +498,11 @@ export default function RadialGraph({
         {radialLayout.map((node) => {
           const isCurrent = node.id === currentNodeId;
           const isLiteral = isLiteralNodeId(node.id);
+          const isDangling = isDanglingNodeId(node.id);
           const fill = isCurrent
             ? "#8a6df6"
+            : isDangling
+              ? "#dc2626"
             : isLiteral
               ? "#a8c547"
               : node.direction === "incoming"
@@ -362,6 +512,8 @@ export default function RadialGraph({
                   : "#8a6df6";
           const stroke = isCurrent
             ? "#6f55dc"
+            : isDangling
+              ? "#991b1b"
             : isLiteral
               ? "#7a9a2e"
               : node.direction === "incoming"
@@ -375,10 +527,12 @@ export default function RadialGraph({
           const pillHeight = 18;
           const pillX = node.x - (pillWidth / 2);
           const pillY = node.y - 43;
-          const pillFill = isCurrent ? "#ede9fe" : isLiteral ? "#f4fce3" : "#eff6ff";
-          const pillStroke = isCurrent ? "#8b5cf6" : isLiteral ? "#a8c547" : "#60a5fa";
+          const pillFill = isCurrent ? "#ede9fe" : isDangling ? "#fee2e2" : isLiteral ? "#f4fce3" : "#eff6ff";
+          const pillStroke = isCurrent ? "#8b5cf6" : isDangling ? "#dc2626" : isLiteral ? "#a8c547" : "#60a5fa";
           const pillTextClass = isCurrent
             ? "fill-[#5b21b6]"
+            : isDangling
+              ? "fill-[#991b1b]"
             : isLiteral
               ? "fill-[#4d7c0f]"
               : "fill-[#1e3a8a]";
@@ -451,28 +605,15 @@ export default function RadialGraph({
           );
         })}
 
-        {selectedRadialNode ? (() => {
-          const tooltipWidth = 290;
-          const tooltipHeight = 74;
-          const rawX = selectedRadialNode.x + 18;
-          const rawY = selectedRadialNode.y - tooltipHeight - 16;
-          const tooltipX = Math.max(10, Math.min(rawX, graphCanvasWidth - tooltipWidth - 10));
-          const tooltipY = Math.max(10, Math.min(rawY, graphCanvasHeight - tooltipHeight - 10));
-          return (
-            <g>
-              <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} rx={8} fill="#0f172acc" stroke="#475569" strokeWidth={1} />
-              <text x={tooltipX + 10} y={tooltipY + 22} className="fill-white text-[12px] font-semibold">
-                {clampLabel(selectedRadialNode.label, 36)}
-              </text>
-              <text x={tooltipX + 10} y={tooltipY + 40} className="fill-slate-200 text-[10px]">
-                {clampLabel(selectedRadialNode.id, 52)}
-              </text>
-              <text x={tooltipX + 10} y={tooltipY + 58} className="fill-slate-300 text-[10px]">
-                {`${selectedRadialNode.incomingCount} incoming / ${selectedRadialNode.outgoingCount} outgoing`}
-              </text>
-            </g>
-          );
-        })() : null}
+        {selectedRadialNode ? (
+          <NodeDetailTooltip
+            node={selectedRadialNode}
+            x={selectedRadialNode.x}
+            y={selectedRadialNode.y}
+            canvasWidth={graphCanvasWidth}
+            canvasHeight={graphCanvasHeight}
+          />
+        ) : null}
       </svg>
     </div>
   );
