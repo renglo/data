@@ -105,6 +105,12 @@ function edgeDetailsForNode(edge: GraphEdgeRecord, role: "from" | "to"): RadialG
   };
 }
 
+function relationshipClassFromEdge(edge: GraphEdgeRecord): string | undefined {
+  const qualifiers = edge.qualifiers && typeof edge.qualifiers === "object" ? edge.qualifiers : {};
+  const text = formatDetailValue(qualifiers["relationship_class"]);
+  return text || undefined;
+}
+
 function upsertNode(
   nodeMap: Map<string, RadialGraphNode>,
   nodeId: string,
@@ -223,6 +229,7 @@ export function buildNodeEdgesRadialGraphModel(
       label: String(edge?.edge_label || edge?.edge_type || "incoming"),
       edgeLabel: typeof edge?.edge_label === "string" && edge.edge_label.trim() ? edge.edge_label.trim() : undefined,
       direction: "incoming",
+      relationshipClass: relationshipClassFromEdge(edge),
     });
   }
 
@@ -249,6 +256,7 @@ export function buildNodeEdgesRadialGraphModel(
       label: String(edge?.edge_label || edge?.edge_type || "outgoing"),
       edgeLabel: typeof edge?.edge_label === "string" && edge.edge_label.trim() ? edge.edge_label.trim() : undefined,
       direction: "outgoing",
+      relationshipClass: relationshipClassFromEdge(edge),
     });
   }
 
@@ -327,14 +335,21 @@ export function buildTraverseRadialGraphModel(
     if (seenLinks.has(dedupeKey)) continue;
     seenLinks.add(dedupeKey);
 
+    // Stored edges are canonical from -> to. Backward traversal walks to the
+    // predecessor (from_node_id), so reverse endpoints to match the backward
+    // label and the direction the walk actually took.
+    const visualSourceId = traversalDirection === "backward" ? toId : fromId;
+    const visualTargetId = traversalDirection === "backward" ? fromId : toId;
+
     links.push({
-      id: `step-${links.length}-${fromId}-${toId}`,
-      sourceId: fromId,
-      targetId: toId,
+      id: `step-${links.length}-${visualSourceId}-${visualTargetId}`,
+      sourceId: visualSourceId,
+      targetId: visualTargetId,
       label: edgeLabel,
       edgeLabel: edgeLabel,
-      direction: traversalDirection === "backward" ? "incoming" : "outgoing",
+      direction: "outgoing",
       hop,
+      relationshipClass: relationshipClassFromEdge(edge),
     });
   }
 

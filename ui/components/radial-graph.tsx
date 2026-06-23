@@ -25,6 +25,7 @@ export interface RadialGraphLink {
   edgeLabel?: string;
   direction: "incoming" | "outgoing";
   hop?: number;
+  relationshipClass?: string;
 }
 
 export interface RadialLegendItem {
@@ -179,6 +180,8 @@ const DEFAULT_HOP_COLORS = [
   "#ec4899",
 ];
 
+const DERIVED_EDGE_COLOR = "#00BFFF";
+
 function shortNodeId(nodeId: string): string {
   const value = String(nodeId || "").trim();
   if (!value) return "Unknown";
@@ -192,6 +195,40 @@ function getBlueprintNameFromNodeId(nodeId: string): string {
   if (!value) return "unknown";
   const [blueprintName] = value.split("/");
   return blueprintName && blueprintName.trim() ? blueprintName.trim() : "unknown";
+}
+
+function getProviderTypeFromNode(node: RadialGraphNode): string | undefined {
+  const projection = node.details?.projection;
+  if (projection) {
+    for (const key of ["from.provider_type", "to.provider_type", "provider_type"]) {
+      const text = String(projection[key] ?? "").trim();
+      if (text) {
+        return text;
+      }
+    }
+  }
+
+  const qualifiers = node.details?.qualifiers;
+  if (qualifiers) {
+    for (const key of ["to.provider_type", "from.provider_type", "provider_type"]) {
+      const text = String(qualifiers[key] ?? "").trim();
+      if (text) {
+        return text;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function getNodePillLabel(node: RadialGraphNode): string {
+  return getProviderTypeFromNode(node) || getBlueprintNameFromNodeId(node.id);
+}
+
+function clampPillLabel(raw: string, maxLength = 28): string {
+  const value = String(raw || "").trim();
+  if (!value) return "unknown";
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
 }
 
 function isLiteralNodeId(nodeId: string): boolean {
@@ -209,6 +246,10 @@ function isLiteralLink(link: RadialGraphLink): boolean {
 
 function isDanglingLink(link: RadialGraphLink): boolean {
   return isDanglingNodeId(link.sourceId) || isDanglingNodeId(link.targetId);
+}
+
+function isDerivedLink(link: RadialGraphLink): boolean {
+  return String(link.relationshipClass || "").trim().toLowerCase() === "derived";
 }
 
 function clampLabel(raw: string, maxLength = 22): string {
@@ -263,6 +304,19 @@ export default function RadialGraph({
   const [copiedNodeId, setCopiedNodeId] = useState<string | null>(null);
   const [showLiteralEdges, setShowLiteralEdges] = useState(false);
   const [showDanglingEdges, setShowDanglingEdges] = useState(true);
+  const [showDerivedEdges, setShowDerivedEdges] = useState(false);
+  const hasOutgoingLiteralEdges = useMemo(
+    () => links.some((link) => link.direction === "outgoing" && isLiteralLink(link)),
+    [links],
+  );
+  const hasOutgoingDanglingEdges = useMemo(
+    () => links.some((link) => link.direction === "outgoing" && isDanglingLink(link)),
+    [links],
+  );
+  const hasDerivedEdges = useMemo(
+    () => links.some(isDerivedLink),
+    [links],
+  );
 
   const copyNodeId = async (nodeId: string, event: React.MouseEvent) => {
     event.stopPropagation();
@@ -282,9 +336,10 @@ export default function RadialGraph({
       links.filter((link) => {
         if (!showDanglingEdges && isDanglingLink(link)) return false;
         if (!showLiteralEdges && isLiteralLink(link)) return false;
+        if (!showDerivedEdges && isDerivedLink(link)) return false;
         return true;
       }),
-    [links, showDanglingEdges, showLiteralEdges],
+    [links, showDanglingEdges, showLiteralEdges, showDerivedEdges],
   );
 
   const centerIncomingCount = useMemo(
@@ -379,22 +434,36 @@ export default function RadialGraph({
             {item.label}
           </span>
         ))}
-        <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
-          <input
-            type="checkbox"
-            checked={showLiteralEdges}
-            onChange={(event) => setShowLiteralEdges(event.target.checked)}
-          />
-          Show literal edges
-        </label>
-        <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
-          <input
-            type="checkbox"
-            checked={showDanglingEdges}
-            onChange={(event) => setShowDanglingEdges(event.target.checked)}
-          />
-          Show dangling edges
-        </label>
+        {hasOutgoingLiteralEdges ? (
+          <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
+            <input
+              type="checkbox"
+              checked={showLiteralEdges}
+              onChange={(event) => setShowLiteralEdges(event.target.checked)}
+            />
+            Show literal edges
+          </label>
+        ) : null}
+        {hasOutgoingDanglingEdges ? (
+          <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
+            <input
+              type="checkbox"
+              checked={showDanglingEdges}
+              onChange={(event) => setShowDanglingEdges(event.target.checked)}
+            />
+            Show dangling edges
+          </label>
+        ) : null}
+        {hasDerivedEdges ? (
+          <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
+            <input
+              type="checkbox"
+              checked={showDerivedEdges}
+              onChange={(event) => setShowDerivedEdges(event.target.checked)}
+            />
+            Show derived effective-access edges
+          </label>
+        ) : null}
       </div>
       <svg
         viewBox={`0 0 ${graphCanvasWidth} ${graphCanvasHeight}`}
@@ -438,7 +507,9 @@ export default function RadialGraph({
           const source = radialNodesById.get(link.sourceId);
           const target = radialNodesById.get(link.targetId);
           if (!source || !target) return null;
-          const lineColor = isDanglingLink(link)
+          const lineColor = isDerivedLink(link)
+            ? DERIVED_EDGE_COLOR
+            : isDanglingLink(link)
             ? "#dc2626"
             : edgeColorMode === "hop"
             ? getHopColor(link.hop || 1, hopColors)
@@ -521,9 +592,9 @@ export default function RadialGraph({
                 : node.direction === "outgoing"
                   ? "#239d74"
                   : "#6f55dc";
-          const blueprintName = getBlueprintNameFromNodeId(node.id);
+          const pillLabel = clampPillLabel(getNodePillLabel(node));
           const copyButtonSize = 14;
-          const pillWidth = Math.max(54, blueprintName.length * 6.6 + 14);
+          const pillWidth = Math.max(54, pillLabel.length * 6.6 + 14);
           const pillHeight = 18;
           const pillX = node.x - (pillWidth / 2);
           const pillY = node.y - 43;
@@ -555,7 +626,7 @@ export default function RadialGraph({
                 textAnchor="middle"
                 className={`pointer-events-none text-[10px] font-semibold ${pillTextClass}`}
               >
-                {blueprintName}
+                {pillLabel}
               </text>
               <circle
                 cx={node.x}
