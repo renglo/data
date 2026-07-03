@@ -197,10 +197,11 @@ function getBlueprintNameFromNodeId(nodeId: string): string {
   return blueprintName && blueprintName.trim() ? blueprintName.trim() : "unknown";
 }
 
-function getProviderTypeFromNode(node: RadialGraphNode): string | undefined {
+function getProjectionFieldFromNode(node: RadialGraphNode, fieldName: string): string | undefined {
+  const keys = [`from.${fieldName}`, `to.${fieldName}`, fieldName];
   const projection = node.details?.projection;
   if (projection) {
-    for (const key of ["from.provider_type", "to.provider_type", "provider_type"]) {
+    for (const key of keys) {
       const text = String(projection[key] ?? "").trim();
       if (text) {
         return text;
@@ -210,7 +211,7 @@ function getProviderTypeFromNode(node: RadialGraphNode): string | undefined {
 
   const qualifiers = node.details?.qualifiers;
   if (qualifiers) {
-    for (const key of ["to.provider_type", "from.provider_type", "provider_type"]) {
+    for (const key of keys) {
       const text = String(qualifiers[key] ?? "").trim();
       if (text) {
         return text;
@@ -221,8 +222,20 @@ function getProviderTypeFromNode(node: RadialGraphNode): string | undefined {
   return undefined;
 }
 
+function getProviderTypeFromNode(node: RadialGraphNode): string | undefined {
+  return getProjectionFieldFromNode(node, "provider_type");
+}
+
+function getElementTypeFromNode(node: RadialGraphNode): string | undefined {
+  return getProjectionFieldFromNode(node, "element_type");
+}
+
 function getNodePillLabel(node: RadialGraphNode): string {
-  return getProviderTypeFromNode(node) || getBlueprintNameFromNodeId(node.id);
+  return (
+    getProviderTypeFromNode(node)
+    || getElementTypeFromNode(node)
+    || getBlueprintNameFromNodeId(node.id)
+  );
 }
 
 function clampPillLabel(raw: string, maxLength = 28): string {

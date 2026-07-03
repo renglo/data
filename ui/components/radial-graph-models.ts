@@ -72,6 +72,7 @@ function projectionEntriesForRole(
   if (!projection || typeof projection !== "object") return entries;
   for (const [key, rawValue] of Object.entries(projection).sort(([a], [b]) => a.localeCompare(b))) {
     if (!key.startsWith(prefix)) continue;
+    if (key.endsWith("._caption")) continue;
     const text = formatDetailValue(rawValue);
     if (text) entries[key] = text;
   }
@@ -132,16 +133,24 @@ function upsertNode(
 
 function getProjectionRoleCaption(edge: GraphEdgeRecord, role: "from" | "to"): string | undefined {
   const projection = edge.projection && typeof edge.projection === "object" ? edge.projection : {};
+  const captionKey = `${role}._caption`;
+  const explicitCaption = projection[captionKey];
+  if (explicitCaption !== undefined && explicitCaption !== null) {
+    const text = String(explicitCaption).trim();
+    if (text) return text;
+  }
+
   const prefix = `${role}.`;
   const values: string[] = [];
   for (const [key, rawValue] of Object.entries(projection).sort(([a], [b]) => a.localeCompare(b))) {
     if (!key.startsWith(prefix)) continue;
+    if (key.endsWith("._caption")) continue;
     if (rawValue === undefined || rawValue === null) continue;
     const text = String(rawValue).trim();
     if (text) values.push(text);
   }
   if (values.length === 0) return undefined;
-  return values.join(" ");
+  return values.join(" | ");
 }
 
 function getNeighborLabel(edge: GraphEdgeRecord, direction: "incoming" | "outgoing", fallbackNodeId: string): string {
