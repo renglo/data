@@ -19,3 +19,7 @@ from data import get_handler
 handler = get_handler("data_onboardings")
 result = handler.run(payload={})
 ```
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE.txt](../LICENSE.txt) for details.

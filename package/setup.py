@@ -11,6 +11,7 @@ setup(
     version="1.0.0",
     description="Data extension custom handlers and utilities",
     author="Renglo Team",
+    license="MIT",
     packages=find_packages(),
     python_requires=">=3.12",
     install_requires=[
