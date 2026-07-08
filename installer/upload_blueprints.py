@@ -3,6 +3,7 @@ import argparse
 import os
 import json
 import configparser
+import uuid
 from typing import Dict, List
 from pathlib import Path
 
@@ -132,6 +133,20 @@ def upload_blueprints(dynamodb, table_name: str, blueprints: List[Dict]) -> Dict
             # Set version to "latest" if not specified
             if 'version' not in blueprint:
                 blueprint['version'] = 'latest'
+
+            # Preserve _id for existing documents and generate it for new ones.
+            existing = table.get_item(
+                Key={
+                    "irn": blueprint["irn"],
+                    "version": blueprint["version"],
+                }
+            ).get("Item")
+
+            if "_id" not in blueprint:
+                if existing and "_id" in existing:
+                    blueprint["_id"] = existing["_id"]
+                elif not existing:
+                    blueprint["_id"] = str(uuid.uuid4())
 
             # Upload to DynamoDB
             table.put_item(Item=blueprint)

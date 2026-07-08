@@ -1,4 +1,4 @@
-import type { RadialGraphLink, RadialGraphNode } from "./radial-graph";
+import type { RadialGraphLink, RadialGraphNode, RadialGraphNodeDetails } from "./radial-graph";
 
 interface GraphEdgeRecord {
   edge_label?: string;
@@ -6,6 +6,8 @@ interface GraphEdgeRecord {
   from_node_id?: string;
   to_node_id?: string;
   projection?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
+  qualifiers?: Record<string, unknown>;
 }
 
 interface GraphNodeEdgesResponse {
@@ -36,18 +38,129 @@ function toGraphNodeEdgesResponse(input: unknown): GraphNodeEdgesResponse {
   return input as GraphNodeEdgesResponse;
 }
 
-function getNeighborLabel(edge: GraphEdgeRecord, direction: "incoming" | "outgoing", fallbackNodeId: string): string {
+function isLiteralNodeId(nodeId: string): boolean {
+  const value = String(nodeId || "").trim();
+  return value.startsWith("_literal/") || value.startsWith("_dangling/");
+}
+
+function getLiteralValueFromEdge(edge: GraphEdgeRecord): string | undefined {
+  const properties = edge.properties && typeof edge.properties === "object" ? edge.properties : {};
+  const value = properties.value;
+  if (value === undefined || value === null) return undefined;
+  const text = String(value).trim();
+  return text || undefined;
+}
+
+function formatDetailValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value).trim();
+}
+
+function projectionEntriesForRole(
+  projection: Record<string, unknown> | undefined,
+  role: "from" | "to",
+): Record<string, string> {
+  const prefix = `${role}.`;
+  const entries: Record<string, string> = {};
+  if (!projection || typeof projection !== "object") return entries;
+  for (const [key, rawValue] of Object.entries(projection).sort(([a], [b]) => a.localeCompare(b))) {
+    if (!key.startsWith(prefix)) continue;
+    if (key.endsWith("._caption")) continue;
+    const text = formatDetailValue(rawValue);
+    if (text) entries[key] = text;
+  }
+  return entries;
+}
+
+function qualifierEntries(qualifiers: Record<string, unknown> | undefined): Record<string, string> {
+  const entries: Record<string, string> = {};
+  if (!qualifiers || typeof qualifiers !== "object") return entries;
+  for (const [key, rawValue] of Object.entries(qualifiers).sort(([a], [b]) => a.localeCompare(b))) {
+    const text = formatDetailValue(rawValue);
+    if (text) entries[key] = text;
+  }
+  return entries;
+}
+
+function mergeNodeDetails(
+  existing: RadialGraphNodeDetails | undefined,
+  incoming: RadialGraphNodeDetails,
+): RadialGraphNodeDetails {
+  return {
+    projection: { ...(existing?.projection ?? {}), ...incoming.projection },
+    qualifiers: { ...(existing?.qualifiers ?? {}), ...incoming.qualifiers },
+  };
+}
+
+function edgeDetailsForNode(edge: GraphEdgeRecord, role: "from" | "to"): RadialGraphNodeDetails {
+  return {
+    projection: projectionEntriesForRole(edge.projection, role),
+    qualifiers: qualifierEntries(edge.qualifiers),
+  };
+}
+
+function relationshipClassFromEdge(edge: GraphEdgeRecord): string | undefined {
+  const qualifiers = edge.qualifiers && typeof edge.qualifiers === "object" ? edge.qualifiers : {};
+  const text = formatDetailValue(qualifiers["relationship_class"]);
+  return text || undefined;
+}
+
+function upsertNode(
+  nodeMap: Map<string, RadialGraphNode>,
+  nodeId: string,
+  patch: Partial<RadialGraphNode> & { details?: RadialGraphNodeDetails },
+): void {
+  const existing = nodeMap.get(nodeId);
+  const mergedDetails = patch.details
+    ? mergeNodeDetails(existing?.details, patch.details)
+    : existing?.details;
+  nodeMap.set(nodeId, {
+    id: nodeId,
+    label: patch.label ?? existing?.label ?? shortNodeId(nodeId),
+    direction: patch.direction ?? existing?.direction ?? "both",
+    incomingCount: patch.incomingCount ?? existing?.incomingCount ?? 0,
+    outgoingCount: patch.outgoingCount ?? existing?.outgoingCount ?? 0,
+    details: mergedDetails,
+  });
+}
+
+function getProjectionRoleCaption(edge: GraphEdgeRecord, role: "from" | "to"): string | undefined {
   const projection = edge.projection && typeof edge.projection === "object" ? edge.projection : {};
-  const fromName = projection["from.name"];
-  const toName = projection["to.name"];
-  const preferred = direction === "incoming" ? fromName : toName;
-  if (typeof preferred === "string" && preferred.trim()) {
-    return preferred.trim();
+  const captionKey = `${role}._caption`;
+  const explicitCaption = projection[captionKey];
+  if (explicitCaption !== undefined && explicitCaption !== null) {
+    const text = String(explicitCaption).trim();
+    if (text) return text;
   }
-  const secondary = direction === "incoming" ? toName : fromName;
-  if (typeof secondary === "string" && secondary.trim()) {
-    return secondary.trim();
+
+  const prefix = `${role}.`;
+  const values: string[] = [];
+  for (const [key, rawValue] of Object.entries(projection).sort(([a], [b]) => a.localeCompare(b))) {
+    if (!key.startsWith(prefix)) continue;
+    if (key.endsWith("._caption")) continue;
+    if (rawValue === undefined || rawValue === null) continue;
+    const text = String(rawValue).trim();
+    if (text) values.push(text);
   }
+  if (values.length === 0) return undefined;
+  return values.join(" | ");
+}
+
+function getNeighborLabel(edge: GraphEdgeRecord, direction: "incoming" | "outgoing", fallbackNodeId: string): string {
+  if (isLiteralNodeId(fallbackNodeId)) {
+    const literalValue = getLiteralValueFromEdge(edge);
+    if (literalValue) return literalValue;
+  }
+  const role = direction === "incoming" ? "from" : "to";
+  const projectionCaption = getProjectionRoleCaption(edge, role);
+  if (projectionCaption) return projectionCaption;
   return shortNodeId(fallbackNodeId);
 }
 
@@ -56,18 +169,39 @@ function getNodeLabelFromProjection(
   nodeRole: "from" | "to",
   fallbackNodeId: string,
 ): string {
-  const projection = edge.projection && typeof edge.projection === "object" ? edge.projection : {};
-  const nameKey = nodeRole === "from" ? "from.name" : "to.name";
-  const altKey = nodeRole === "from" ? "to.name" : "from.name";
-  const primary = projection[nameKey];
-  if (typeof primary === "string" && primary.trim()) {
-    return primary.trim();
+  if (isLiteralNodeId(fallbackNodeId)) {
+    const literalValue = getLiteralValueFromEdge(edge);
+    if (literalValue) return literalValue;
   }
-  const secondary = projection[altKey];
-  if (typeof secondary === "string" && secondary.trim()) {
-    return secondary.trim();
-  }
+  const projectionCaption = getProjectionRoleCaption(edge, nodeRole);
+  if (projectionCaption) return projectionCaption;
   return shortNodeId(fallbackNodeId);
+}
+
+function resolveCenterNodeLabel(
+  centerId: string,
+  incomingEdges: GraphEdgeRecord[],
+  outgoingEdges: GraphEdgeRecord[],
+): string {
+  if (isLiteralNodeId(centerId)) {
+    for (const edge of [...outgoingEdges, ...incomingEdges]) {
+      const literalValue = getLiteralValueFromEdge(edge);
+      if (literalValue) return literalValue;
+    }
+  }
+  for (const edge of outgoingEdges) {
+    const fromId = String(edge?.from_node_id || "").trim();
+    if (fromId !== centerId) continue;
+    const caption = getProjectionRoleCaption(edge, "from");
+    if (caption) return caption;
+  }
+  for (const edge of incomingEdges) {
+    const toId = String(edge?.to_node_id || "").trim();
+    if (toId !== centerId) continue;
+    const caption = getProjectionRoleCaption(edge, "to");
+    if (caption) return caption;
+  }
+  return shortNodeId(centerId);
 }
 
 export function buildNodeEdgesRadialGraphModel(
@@ -87,12 +221,15 @@ export function buildNodeEdgesRadialGraphModel(
     if (!sourceId) continue;
     const existing = nodeMap.get(sourceId);
     const label = getNeighborLabel(edge, "incoming", sourceId);
-    nodeMap.set(sourceId, {
-      id: sourceId,
+    upsertNode(nodeMap, sourceId, {
       label: existing?.label || label,
       direction: existing?.direction === "outgoing" || existing?.direction === "both" ? "both" : "incoming",
       incomingCount: (existing?.incomingCount || 0) + 1,
       outgoingCount: existing?.outgoingCount || 0,
+      details: edgeDetailsForNode(edge, "from"),
+    });
+    upsertNode(nodeMap, centerId, {
+      details: edgeDetailsForNode(edge, "to"),
     });
     links.push({
       id: `in-${sourceId}-${targetId}-${links.length}`,
@@ -101,6 +238,7 @@ export function buildNodeEdgesRadialGraphModel(
       label: String(edge?.edge_label || edge?.edge_type || "incoming"),
       edgeLabel: typeof edge?.edge_label === "string" && edge.edge_label.trim() ? edge.edge_label.trim() : undefined,
       direction: "incoming",
+      relationshipClass: relationshipClassFromEdge(edge),
     });
   }
 
@@ -110,12 +248,15 @@ export function buildNodeEdgesRadialGraphModel(
     if (!targetId) continue;
     const existing = nodeMap.get(targetId);
     const label = getNeighborLabel(edge, "outgoing", targetId);
-    nodeMap.set(targetId, {
-      id: targetId,
+    upsertNode(nodeMap, targetId, {
       label: existing?.label || label,
       direction: existing?.direction === "incoming" || existing?.direction === "both" ? "both" : "outgoing",
       incomingCount: existing?.incomingCount || 0,
       outgoingCount: (existing?.outgoingCount || 0) + 1,
+      details: edgeDetailsForNode(edge, "to"),
+    });
+    upsertNode(nodeMap, centerId, {
+      details: edgeDetailsForNode(edge, "from"),
     });
     links.push({
       id: `out-${sourceId}-${targetId}-${links.length}`,
@@ -124,8 +265,17 @@ export function buildNodeEdgesRadialGraphModel(
       label: String(edge?.edge_label || edge?.edge_type || "outgoing"),
       edgeLabel: typeof edge?.edge_label === "string" && edge.edge_label.trim() ? edge.edge_label.trim() : undefined,
       direction: "outgoing",
+      relationshipClass: relationshipClassFromEdge(edge),
     });
   }
+
+  const centerLabel = resolveCenterNodeLabel(centerId, incomingEdges, outgoingEdges);
+  upsertNode(nodeMap, centerId, {
+    label: centerLabel,
+    direction: "both",
+    incomingCount: incomingEdges.length,
+    outgoingCount: outgoingEdges.length,
+  });
 
   return {
     centerId,
@@ -166,8 +316,7 @@ export function buildTraverseRadialGraphModel(
     const fromExisting = nodeMap.get(fromId);
     const toExisting = nodeMap.get(toId);
 
-    nodeMap.set(fromId, {
-      id: fromId,
+    upsertNode(nodeMap, fromId, {
       label: fromExisting?.label || getNodeLabelFromProjection(edge, "from", fromId),
       direction:
         (fromExisting?.incomingCount || 0) > 0 || (fromExisting?.outgoingCount || 0) + 1 > 0
@@ -175,10 +324,10 @@ export function buildTraverseRadialGraphModel(
           : "outgoing",
       incomingCount: fromExisting?.incomingCount || 0,
       outgoingCount: (fromExisting?.outgoingCount || 0) + 1,
+      details: edgeDetailsForNode(edge, "from"),
     });
 
-    nodeMap.set(toId, {
-      id: toId,
+    upsertNode(nodeMap, toId, {
       label: toExisting?.label || getNodeLabelFromProjection(edge, "to", toId),
       direction:
         (toExisting?.outgoingCount || 0) > 0 || (toExisting?.incomingCount || 0) + 1 > 0
@@ -186,6 +335,7 @@ export function buildTraverseRadialGraphModel(
           : "incoming",
       incomingCount: (toExisting?.incomingCount || 0) + 1,
       outgoingCount: toExisting?.outgoingCount || 0,
+      details: edgeDetailsForNode(edge, "to"),
     });
 
     const edgeType = String(edge?.edge_type || "");
@@ -194,19 +344,49 @@ export function buildTraverseRadialGraphModel(
     if (seenLinks.has(dedupeKey)) continue;
     seenLinks.add(dedupeKey);
 
+    // Stored edges are canonical from -> to. Backward traversal walks to the
+    // predecessor (from_node_id), so reverse endpoints to match the backward
+    // label and the direction the walk actually took.
+    const visualSourceId = traversalDirection === "backward" ? toId : fromId;
+    const visualTargetId = traversalDirection === "backward" ? fromId : toId;
+
     links.push({
-      id: `step-${links.length}-${fromId}-${toId}`,
-      sourceId: fromId,
-      targetId: toId,
+      id: `step-${links.length}-${visualSourceId}-${visualTargetId}`,
+      sourceId: visualSourceId,
+      targetId: visualTargetId,
       label: edgeLabel,
       edgeLabel: edgeLabel,
-      direction: traversalDirection === "backward" ? "incoming" : "outgoing",
+      direction: "outgoing",
       hop,
+      relationshipClass: relationshipClassFromEdge(edge),
     });
   }
 
+  const traverseEdges = steps
+    .map((step) => {
+      const stepObj = step && typeof step === "object" ? (step as Record<string, unknown>) : {};
+      const edgeObj = stepObj.edge && typeof stepObj.edge === "object"
+        ? (stepObj.edge as Record<string, unknown>)
+        : {};
+      return edgeObj as GraphEdgeRecord;
+    })
+    .filter((edge) => String(edge?.from_node_id || "").trim() && String(edge?.to_node_id || "").trim());
+
+  const incomingEdges = traverseEdges.filter((edge) => String(edge?.to_node_id || "").trim() === centerId);
+  const outgoingEdges = traverseEdges.filter((edge) => String(edge?.from_node_id || "").trim() === centerId);
+  const centerLabel = resolveCenterNodeLabel(centerId, incomingEdges, outgoingEdges);
+
+  upsertNode(nodeMap, centerId, {
+    label: centerLabel,
+    direction: "both",
+    incomingCount: incomingEdges.length,
+    outgoingCount: outgoingEdges.length,
+  });
+
   const nodes = Array.from(nodeMap.values()).map((node) => {
-    if (node.id === centerId) return node;
+    if (node.id === centerId) {
+      return node;
+    }
     if (traversalDirection === "backward") {
       return { ...node, direction: "incoming" as const };
     }
@@ -220,7 +400,7 @@ export function buildTraverseRadialGraphModel(
       return { ...node, direction: "incoming" as const };
     }
     return { ...node, direction: "outgoing" as const };
-  }).filter((node) => node.id !== centerId);
+  });
 
   return {
     centerId,
