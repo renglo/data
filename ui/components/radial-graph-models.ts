@@ -6,7 +6,11 @@ interface GraphEdgeRecord {
   from_node_id?: string;
   to_node_id?: string;
   projection?: Record<string, unknown>;
+  attributes?: Record<string, unknown>;
+  extras?: Record<string, unknown>;
+  /** @deprecated */
   properties?: Record<string, unknown>;
+  /** @deprecated */
   qualifiers?: Record<string, unknown>;
 }
 
@@ -44,8 +48,9 @@ function isLiteralNodeId(nodeId: string): boolean {
 }
 
 function getLiteralValueFromEdge(edge: GraphEdgeRecord): string | undefined {
-  const properties = edge.properties && typeof edge.properties === "object" ? edge.properties : {};
-  const value = properties.value;
+  const extras = edge.extras && typeof edge.extras === "object" ? edge.extras : {};
+  const legacy = edge.properties && typeof edge.properties === "object" ? edge.properties : {};
+  const value = extras.value ?? legacy.value;
   if (value === undefined || value === null) return undefined;
   const text = String(value).trim();
   return text || undefined;
@@ -79,14 +84,25 @@ function projectionEntriesForRole(
   return entries;
 }
 
-function qualifierEntries(qualifiers: Record<string, unknown> | undefined): Record<string, string> {
+function attributeEntries(bag: Record<string, unknown> | undefined): Record<string, string> {
   const entries: Record<string, string> = {};
-  if (!qualifiers || typeof qualifiers !== "object") return entries;
-  for (const [key, rawValue] of Object.entries(qualifiers).sort(([a], [b]) => a.localeCompare(b))) {
+  if (!bag || typeof bag !== "object") return entries;
+  for (const [key, rawValue] of Object.entries(bag).sort(([a], [b]) => a.localeCompare(b))) {
     const text = formatDetailValue(rawValue);
     if (text) entries[key] = text;
   }
   return entries;
+}
+
+function edgeAttributeBag(edge: GraphEdgeRecord): Record<string, unknown> {
+  const attributes = edge.attributes && typeof edge.attributes === "object" ? edge.attributes : {};
+  const extras = edge.extras && typeof edge.extras === "object" ? edge.extras : {};
+  if (Object.keys(attributes).length || Object.keys(extras).length) {
+    return { ...extras, ...attributes };
+  }
+  const legacy = edge.qualifiers && typeof edge.qualifiers === "object" ? edge.qualifiers : {};
+  const legacyProps = edge.properties && typeof edge.properties === "object" ? edge.properties : {};
+  return { ...legacyProps, ...legacy };
 }
 
 function mergeNodeDetails(
@@ -95,20 +111,23 @@ function mergeNodeDetails(
 ): RadialGraphNodeDetails {
   return {
     projection: { ...(existing?.projection ?? {}), ...incoming.projection },
-    qualifiers: { ...(existing?.qualifiers ?? {}), ...incoming.qualifiers },
+    attributes: { ...(existing?.attributes ?? {}), ...incoming.attributes },
+    qualifiers: { ...(existing?.qualifiers ?? {}), ...(incoming.qualifiers ?? incoming.attributes) },
   };
 }
 
 function edgeDetailsForNode(edge: GraphEdgeRecord, role: "from" | "to"): RadialGraphNodeDetails {
+  const bag = attributeEntries(edgeAttributeBag(edge));
   return {
     projection: projectionEntriesForRole(edge.projection, role),
-    qualifiers: qualifierEntries(edge.qualifiers),
+    attributes: bag,
+    qualifiers: bag,
   };
 }
 
 function relationshipClassFromEdge(edge: GraphEdgeRecord): string | undefined {
-  const qualifiers = edge.qualifiers && typeof edge.qualifiers === "object" ? edge.qualifiers : {};
-  const text = formatDetailValue(qualifiers["relationship_class"]);
+  const bag = edgeAttributeBag(edge);
+  const text = formatDetailValue(bag["relationship_class"]);
   return text || undefined;
 }
 

@@ -5,7 +5,9 @@ export type RadialDirection = "incoming" | "outgoing" | "both";
 
 export interface RadialGraphNodeDetails {
   projection: Record<string, string>;
-  qualifiers: Record<string, string>;
+  attributes: Record<string, string>;
+  /** @deprecated use attributes */
+  qualifiers?: Record<string, string>;
 }
 
 export interface RadialGraphNode {
@@ -78,7 +80,7 @@ function NodeDetailTooltip({
 }) {
   const tooltipWidth = 320;
   const projectionRows = detailRows(node.details?.projection);
-  const qualifierRows = detailRows(node.details?.qualifiers);
+  const qualifierRows = detailRows(node.details?.attributes ?? node.details?.qualifiers);
   const sectionCount = (projectionRows.length > 0 ? 1 : 0) + (qualifierRows.length > 0 ? 1 : 0);
   const rowCount = projectionRows.length + qualifierRows.length;
   const tooltipHeight = Math.min(
@@ -132,7 +134,7 @@ function NodeDetailTooltip({
         {qualifierRows.length > 0 ? (
           <div className="mt-3">
             <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-              Qualifiers
+              Attributes
             </div>
             <table className="w-full table-fixed border-collapse text-[10px]">
               <tbody>
@@ -150,7 +152,7 @@ function NodeDetailTooltip({
         ) : null}
 
         {projectionRows.length === 0 && qualifierRows.length === 0 ? (
-          <div className="mt-3 text-[10px] text-slate-400">No projection or qualifier metadata for this node.</div>
+          <div className="mt-3 text-[10px] text-slate-400">No projection or attribute metadata for this node.</div>
         ) : null}
       </div>
     </foreignObject>
@@ -209,10 +211,10 @@ function getProjectionFieldFromNode(node: RadialGraphNode, fieldName: string): s
     }
   }
 
-  const qualifiers = node.details?.qualifiers;
-  if (qualifiers) {
+  const attributes = node.details?.attributes ?? node.details?.qualifiers;
+  if (attributes) {
     for (const key of keys) {
-      const text = String(qualifiers[key] ?? "").trim();
+      const text = String(attributes[key] ?? "").trim();
       if (text) {
         return text;
       }
