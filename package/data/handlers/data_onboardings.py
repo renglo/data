@@ -4,7 +4,7 @@ from flask import current_app
 from datetime import datetime
 
 from renglo.data.data_controller import DataController
-from renglo.docs.docs_controller import DocsController
+from renglo.files.files_controller import FilesController
 from renglo.auth.auth_controller import AuthController
 from renglo.blueprint.blueprint_controller import BlueprintController
 from renglo.common import load_config
@@ -24,7 +24,7 @@ class DataOnboardings:
         
         self.DAC = DataController(config=config)
         self.AUC = AuthController(config=config)
-        self.DCC = DocsController(config=config)
+        self.FCC = FilesController(config=config)
         self.BPC = BlueprintController(config=config)
         self.bridge = {}
           

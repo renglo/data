@@ -74,7 +74,7 @@ export default function ToolDataTmpArtifact({
 
     setLoading(true);
     try {
-      const url = `${import.meta.env.VITE_API_URL}/_docs/${parsed.portfolio}/${parsed.org}/${parsed.entity}/${parsed.date}/${parsed.objectId}`;
+      const url = `${import.meta.env.VITE_API_URL}/_files/${parsed.portfolio}/${parsed.org}/${parsed.entity}/${parsed.date}/${parsed.objectId}`;
       setLastUrl(url);
 
       const response = await fetch(url, {
@@ -116,7 +116,7 @@ export default function ToolDataTmpArtifact({
         <CardHeader>
           <CardTitle>Tmp Artifact Resolver</CardTitle>
           <CardDescription>
-            Resolve a `tmp_artifact` key via `_docs` and inspect the payload.
+            Resolve a `tmp_artifact` key via `_files` and inspect the payload.
             Current location: {portfolio}/{org}
           </CardDescription>
         </CardHeader>
