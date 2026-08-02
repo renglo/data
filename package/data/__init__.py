@@ -9,9 +9,9 @@ __all__ = ["get_handler", "list_handlers", "HANDLERS"]
 
 
 def _get_data_onboardings():
-    from data.handlers.data_onboardings import SchdOnboardings
+    from data.handlers.data_onboardings import DataOnboardings
 
-    return SchdOnboardings
+    return DataOnboardings
 
 
 HANDLERS = {

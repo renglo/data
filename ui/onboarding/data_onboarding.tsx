@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Download, Star } from "lucide-react";
+import { useMemo } from "react";
+import { Download, Star, Telescope } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import DialogPost from "@/components/console/dialog-post";
@@ -10,13 +10,15 @@ interface BlueprintField {
   options?: Record<string, string>;
   widget?: string;
   required?: boolean;
-  [key: string]: any;
+  label?: string;
+  hint?: string;
+  [key: string]: unknown;
 }
 
 interface Blueprint {
   label: string;
   fields?: BlueprintField[];
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface TreeStructure {
@@ -36,40 +38,31 @@ interface OnboardingProps {
   tree: TreeStructure;
 }
 
-import {
-    Telescope,
-  } from "lucide-react"
+const DATA_ONBOARDING_BLUEPRINT: Blueprint = {
+  label: "Data Onboardings",
+  fields: [
+    {
+      cardinality: "single",
+      default: "",
+      hint: "Portfolio this extension should belong to:",
+      label: "Portfolio",
+      layer: "2",
+      multilingual: false,
+      name: "portfolio",
+      order: "2",
+      required: false,
+      semantic: "hs:portfolio",
+      source: "",
+      type: "string",
+      widget: "text",
+    },
+  ],
+};
 
 export default function DataOnboarding({ tree }: OnboardingProps) {
-  const [blueprint, setBlueprint] = useState<Blueprint>({ label: "" });
-  const [modifiedBlueprint, setModifiedBlueprint] = useState<Blueprint>({ label: "" });
-
-  useEffect(() => {
-    const fetchBlueprint = async () => {
-      try {
-        const blueprintResponse = await fetch(
-          `${import.meta.env.VITE_API_URL}/_blueprint/irma/data_onboardings/last`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${sessionStorage.accessToken}`,
-            },
-          }
-        );
-        const blueprintData = await blueprintResponse.json();
-        setBlueprint(blueprintData);
-        setModifiedBlueprint({ ...blueprintData });
-      } catch (err) {
-        console.log(err);
-      }
-    };
-
-    fetchBlueprint();
-  }, []);
-
-  useEffect(() => {
-    if (!tree?.portfolios || !blueprint?.fields) {
-      return;
+  const onboardingBlueprint = useMemo(() => {
+    if (!tree?.portfolios) {
+      return DATA_ONBOARDING_BLUEPRINT;
     }
 
     const portfolioDict: Record<string, string> = {};
@@ -77,9 +70,9 @@ export default function DataOnboarding({ tree }: OnboardingProps) {
       portfolioDict[portfolioId] = portfolio.name;
     });
 
-    const updatedBlueprint = {
-      ...blueprint,
-      fields: blueprint.fields.map((field: BlueprintField) => {
+    return {
+      ...DATA_ONBOARDING_BLUEPRINT,
+      fields: DATA_ONBOARDING_BLUEPRINT.fields!.map((field) => {
         if (field.name === "portfolio") {
           return {
             ...field,
@@ -92,12 +85,10 @@ export default function DataOnboarding({ tree }: OnboardingProps) {
         return field;
       }),
     };
-
-    setModifiedBlueprint(updatedBlueprint);
-  }, [tree, blueprint]);
+  }, [tree]);
 
   const refreshAction = () => {};
-  const portfolioField = modifiedBlueprint.fields?.find(
+  const portfolioField = onboardingBlueprint.fields?.find(
     (field: BlueprintField) => field.name === "portfolio"
   );
   const hasPortfolioOptions =
@@ -148,7 +139,7 @@ export default function DataOnboarding({ tree }: OnboardingProps) {
           {hasPortfolioOptions ? (
             <DialogPost
               refreshUp={refreshAction}
-              blueprint={modifiedBlueprint}
+              blueprint={onboardingBlueprint}
               title="Activate your portfolio"
               instructions="Please fill the following fields:"
               path={`${import.meta.env.VITE_API_URL}/_schd/run/data/data_onboardings`}
@@ -163,4 +154,3 @@ export default function DataOnboarding({ tree }: OnboardingProps) {
     </Card>
   );
 }
-  
