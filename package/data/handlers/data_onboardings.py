@@ -157,18 +157,44 @@ class DataOnboardings:
                     
             
             
-    def create_tool(self,portfolio,tool,handle):
+    def create_tool(self,portfolio,tool,handle,roles=None):
 
         #1. Create the Tool blueprints (if they don't exist)
-        #2. Create the tool entity
+        #2. Create the tool entity (or refresh roles catalog if it already exists)
                 
         action = 'create_tool'
         current_app.logger.debug('Installing default tool in portfolio')
         
+        # Opaque role strings interpreted by this extension's handlers.
+        role_catalog = roles if roles is not None else ['viewer', 'editor', 'admin']
+
         kwargs = {}
         kwargs['name'] = tool
         kwargs['handle'] = handle
         kwargs['portfolio_id'] = portfolio #This is the portfolio_id
+        kwargs['roles'] = role_catalog
+
+        # If tool already exists for this handle, refresh the roles catalog.
+        existing = self.AUC.list_entity('tool', portfolio_id=portfolio)
+        items = ((existing or {}).get('document') or {}).get('items') or []
+        for item in items:
+            if str(item.get('handle') or '') == handle:
+                tool_id = item.get('_id')
+                self.bridge['tool_id'] = tool_id
+                update = self.AUC.update_entity(
+                    'tool',
+                    portfolio_id=portfolio,
+                    tool_id=tool_id,
+                    payload={'roles': role_catalog},
+                )
+                return {
+                    'success': bool(update.get('success')),
+                    'action': action,
+                    'message': 'Tool roles catalog refreshed' if update.get('success') else 'Could not refresh tool roles',
+                    'input': kwargs,
+                    'output': update,
+                }
+
         response = self.AUC.create_entity('tool',**kwargs)
         self.bridge['tool_id'] = response['document']['_id']
 
