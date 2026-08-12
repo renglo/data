@@ -32,6 +32,18 @@ interface AgentProps {
   onNavigate?: (path: string) => void;
   /** URL query: `entity_type` and `entity_id` pre-fill and load the session. */
   query?: Record<string, string>;
+  /** Hide coordinate inputs and thread creation; for channel troubleshooting pages. */
+  readOnly?: boolean;
+  title?: string;
+  description?: string;
+  fixedEntityType?: string;
+  fixedEntityId?: string;
+  /**
+   * ``session_threads``: GET …/{entity_type}/{entity_id} (Renglo thread docs).
+   * ``query_prefix``: GET …/{entity_type}/{entity_id}/query (prefix across entity_ids).
+   */
+  threadSource?: "session_threads" | "query_prefix";
+  apiSegment?: "_chat" | "_session";
 }
 
 interface Portfolio {
@@ -78,10 +90,25 @@ interface ThreadItem {
   _id: string;
   time: string;
   is_active?: boolean;
+  entity_id?: string;
+  entity_type?: string;
 }
 
-/** Inspector: load ``entity_type`` + ``entity_id``, view threads/messages/workspaces, create threads. No chat input. */
-export default function ChatInspect({ portfolio, org, tool, tree, query }: AgentProps) {
+/** Inspector: load ``entity_type`` + ``entity_id``, view threads/messages/workspaces. */
+export default function ChatInspect({
+  portfolio,
+  org,
+  tool,
+  tree,
+  query,
+  readOnly = false,
+  title,
+  description,
+  fixedEntityType,
+  fixedEntityId,
+  threadSource = "session_threads",
+  apiSegment: apiSegmentProp,
+}: AgentProps) {
   const portfolio_name = tree?.portfolios[portfolio]?.name;
   const org_name = tree?.portfolios[portfolio]?.orgs[org]?.name;
   const tool_name = tool ? tree?.portfolios[portfolio]?.tools[tool]?.name : undefined;
@@ -95,6 +122,8 @@ export default function ChatInspect({ portfolio, org, tool, tree, query }: Agent
   const [messages, setMessages] = useState<Message[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeThread, setActiveThread] = useState<string | null>(null);
+  /** Entity id used for turn/message fetches (may differ from query prefix). */
+  const [messageEntityId, setMessageEntityId] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -104,7 +133,31 @@ export default function ChatInspect({ portfolio, org, tool, tree, query }: Agent
   const [loadNonce, setLoadNonce] = useState(0);
 
   /** `_chat` vs `_session` API prefix (same path after portfolio/org/entity…). */
-  const [apiSegment, setApiSegment] = useState<"_chat" | "_session">("_chat");
+  const [apiSegment, setApiSegment] = useState<"_chat" | "_session">(
+    apiSegmentProp ?? "_chat",
+  );
+
+  useEffect(() => {
+    if (apiSegmentProp) {
+      setApiSegment(apiSegmentProp);
+    }
+  }, [apiSegmentProp]);
+
+  useEffect(() => {
+    if (!readOnly) return;
+    const et = (fixedEntityType || "").trim();
+    const eid = (fixedEntityId || "").trim();
+    if (!et || !eid) return;
+    setEntityTypeInput(et);
+    setEntityIdInput(eid);
+    setEntityType(et);
+    setEntityId(eid);
+    setActiveThread(null);
+    setMessages([]);
+    setWorkspaces([]);
+    setThreads({ items: [] });
+    setLoadNonce((n) => n + 1);
+  }, [readOnly, fixedEntityType, fixedEntityId]);
 
   const [isAtBottom, setIsAtBottom] = useState(true);
 
@@ -155,6 +208,16 @@ export default function ChatInspect({ portfolio, org, tool, tree, query }: Agent
     setThreads({ items: [] });
   };
 
+  const selectThread = (thread: ThreadItem | null) => {
+    if (!thread) {
+      setActiveThread(null);
+      return;
+    }
+    setActiveThread(thread._id);
+    const eid = String(thread.entity_id || entityId || "").trim();
+    setMessageEntityId(eid || entityId);
+  };
+
   useEffect(() => {
     if (!entityType || !entityId) return;
 
@@ -162,13 +225,15 @@ export default function ChatInspect({ portfolio, org, tool, tree, query }: Agent
       setLoading(true);
       setLoadError(null);
       try {
-        const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/${apiSegment}/${portfolio}/${org}/${entityType}/${entityId}`,
-          {
-            method: "GET",
-            headers: { Authorization: `Bearer ${sessionStorage.accessToken}` },
-          }
-        );
+        const threadsUrl =
+          threadSource === "query_prefix"
+            ? `${import.meta.env.VITE_API_URL}/${apiSegment}/${portfolio}/${org}/${entityType}/${entityId}/query`
+            : `${import.meta.env.VITE_API_URL}/${apiSegment}/${portfolio}/${org}/${entityType}/${entityId}`;
+
+        const response = await fetch(threadsUrl, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${sessionStorage.accessToken}` },
+        });
         const threads_list = await response.json();
         if (!response.ok) {
           setLoadError(typeof threads_list?.message === "string" ? threads_list.message : "Failed to load threads");
@@ -180,10 +245,12 @@ export default function ChatInspect({ portfolio, org, tool, tree, query }: Agent
         setThreads({ items });
         if (items.length === 0) {
           setActiveThread(null);
-          setLoadError("No threads for this session.");
+          setMessageEntityId("");
+          setLoadError("No Renglo threads for this session.");
         } else {
           const activeT = items.find((t) => t.is_active) ?? items[0];
-          setActiveThread(activeT._id);
+          selectThread(activeT);
+          setLoadError(null);
         }
       } catch (e) {
         console.error(e);
@@ -196,16 +263,16 @@ export default function ChatInspect({ portfolio, org, tool, tree, query }: Agent
     };
 
     fetchThreads();
-  }, [portfolio, org, entityType, entityId, loadNonce, apiSegment]);
+  }, [portfolio, org, entityType, entityId, loadNonce, apiSegment, threadSource]);
 
   useEffect(() => {
-    if (!entityType || !entityId || !activeThread) return;
+    if (!entityType || !messageEntityId || !activeThread) return;
 
     const fetchMessages = async () => {
       if (refreshTick > 0) setRefreshingChat(true);
       try {
         const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/${apiSegment}/${portfolio}/${org}/${entityType}/${entityId}/${activeThread}/messages`,
+          `${import.meta.env.VITE_API_URL}/${apiSegment}/${portfolio}/${org}/${entityType}/${messageEntityId}/${activeThread}/messages`,
           {
             method: "GET",
             headers: { Authorization: `Bearer ${sessionStorage.accessToken}` },
@@ -222,15 +289,15 @@ export default function ChatInspect({ portfolio, org, tool, tree, query }: Agent
     };
 
     fetchMessages();
-  }, [portfolio, org, entityType, entityId, activeThread, refreshTick, apiSegment]);
+  }, [portfolio, org, entityType, messageEntityId, activeThread, refreshTick, apiSegment]);
 
   useEffect(() => {
-    if (!entityType || !entityId || !activeThread) return;
+    if (!entityType || !messageEntityId || !activeThread || readOnly) return;
 
     const fetchWorkspaces = async () => {
       try {
         const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/${apiSegment}/${portfolio}/${org}/${entityType}/${entityId}/${activeThread}/workspaces`,
+          `${import.meta.env.VITE_API_URL}/${apiSegment}/${portfolio}/${org}/${entityType}/${messageEntityId}/${activeThread}/workspaces`,
           {
             method: "GET",
             headers: { Authorization: `Bearer ${sessionStorage.accessToken}` },
@@ -245,7 +312,7 @@ export default function ChatInspect({ portfolio, org, tool, tree, query }: Agent
     };
 
     fetchWorkspaces();
-  }, [portfolio, org, entityType, entityId, activeThread, refreshTick, apiSegment]);
+  }, [portfolio, org, entityType, messageEntityId, activeThread, refreshTick, apiSegment, readOnly]);
 
   const refreshChat = () => {
     setRefreshTick((n) => n + 1);
@@ -288,7 +355,7 @@ export default function ChatInspect({ portfolio, org, tool, tree, query }: Agent
           items: [doc, ...prev.items.filter((t) => t._id !== doc._id)],
         }));
       }
-      setActiveThread(doc._id);
+      selectThread(doc);
       setMessages([]);
       setWorkspaces([]);
     } catch (e) {
@@ -377,6 +444,51 @@ export default function ChatInspect({ portfolio, org, tool, tree, query }: Agent
         </div>
       );
     }
+    if (ct === "channel_delivery") {
+      const body =
+        raw && typeof raw === "object" && !Array.isArray(raw)
+          ? (raw as Record<string, unknown>)
+          : {};
+      const status = String(body.status || "unknown");
+      const channel = String(body.channel || "channel");
+      const failed = status === "failed";
+      const providerStatus = body.provider_status;
+      const err = body.provider_error ?? body.error;
+      const errText =
+        err == null
+          ? ""
+          : typeof err === "string"
+            ? err
+            : JSON.stringify(err);
+      const providerId = body.provider_message_id
+        ? String(body.provider_message_id)
+        : "";
+      return (
+        <div
+          key={idx}
+          className={`mb-2 flex max-w-[95%] flex-col self-start rounded-md border px-3 py-2 text-xs ${
+            failed
+              ? "border-destructive/40 bg-destructive/5 text-destructive"
+              : "border-border bg-muted/20 text-muted-foreground"
+          }`}
+        >
+          <div className="font-medium uppercase tracking-wide">
+            {channel} delivery · {status}
+            {providerStatus != null && providerStatus !== ""
+              ? ` · ${String(providerStatus)}`
+              : ""}
+          </div>
+          {failed && errText ? (
+            <pre className="mt-1 whitespace-pre-wrap break-words font-mono opacity-90">
+              {errText.slice(0, 500)}
+            </pre>
+          ) : null}
+          {!failed && providerId ? (
+            <div className="mt-1 font-mono opacity-80">{providerId}</div>
+          ) : null}
+        </div>
+      );
+    }
     if (ct === "tool_call" || ct === "tool_result") {
       return (
         <div
@@ -426,26 +538,23 @@ export default function ChatInspect({ portfolio, org, tool, tree, query }: Agent
     return null;
   };
 
+  const cardTitle = title ?? "Inspect Chat";
+  const cardDescription =
+    description ??
+    `View-only (no message input). Uses portfolio ${portfolio} and org ${org} from the route.${
+      portfolio_name && org_name
+        ? ` (${portfolio_name} / ${org_name}${tool_name ? ` / ${tool_name}` : ""})`
+        : ""
+    } Optional URL: ?entity_type=…&entity_id=…`;
+
   return (
     <div className="flex min-h-0 w-full flex-col gap-4 p-4">
       <Card>
         <CardHeader>
-          <CardTitle>Inspect Chat</CardTitle>
-          <CardDescription>
-            View-only (no message input). Uses portfolio <strong>{portfolio}</strong> and org <strong>{org}</strong> from the route.
-            {portfolio_name && org_name && (
-              <span>
-                {" "}
-                ({portfolio_name} / {org_name}
-                {tool_name ? ` / ${tool_name}` : ""})
-              </span>
-            )}
-            {" "}
-            Optional URL:{" "}
-            <code className="rounded bg-muted px-1 text-xs">{`?entity_type=…&entity_id=…`}</code>{" "}
-            (camelCase <code className="text-xs">entityType</code> / <code className="text-xs">entityId</code> also work.)
-          </CardDescription>
+          <CardTitle>{cardTitle}</CardTitle>
+          <CardDescription>{cardDescription}</CardDescription>
         </CardHeader>
+        {!readOnly && (
         <CardContent className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
           <div className="grid w-full max-w-md gap-2">
             <Label htmlFor="inspect-entity-type">entity_type</Label>
@@ -503,28 +612,54 @@ export default function ChatInspect({ portfolio, org, tool, tree, query }: Agent
             {creatingThread ? "Creating…" : "New thread"}
           </Button>
         </CardContent>
+        )}
+        {readOnly && (
+          <CardContent className="flex flex-wrap items-center gap-2">
+            <code className="rounded bg-muted px-2 py-1 text-xs">
+              {entityType}/{entityId}
+            </code>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={refreshChat}
+              disabled={!entityType || !entityId || !activeThread || refreshingChat || loading}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${refreshingChat ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </CardContent>
+        )}
         {loadError && <p className="px-6 pb-4 text-sm text-destructive">{loadError}</p>}
       </Card>
 
       {entityType && entityId && !loading && threads.items.length > 0 && (
         <div className="flex max-w-4xl flex-wrap items-end gap-4">
           <div className="flex min-w-[220px] flex-1 flex-col gap-2">
-            <Label htmlFor="inspect-thread-select">Thread</Label>
-            <Select value={activeThread ?? undefined} onValueChange={(v) => setActiveThread(v)}>
+            <Label htmlFor="inspect-thread-select">Renglo thread</Label>
+            <Select
+              value={activeThread ?? undefined}
+              onValueChange={(v) => {
+                const t = threads.items.find((item) => item._id === v) ?? null;
+                selectThread(t);
+              }}
+            >
               <SelectTrigger id="inspect-thread-select" className="w-full">
                 <SelectValue placeholder="Select thread" />
               </SelectTrigger>
               <SelectContent>
                 {threads.items.map((t) => (
                   <SelectItem key={t._id} value={t._id}>
-                    {t._id.slice(0, 12)}… ·{" "}
+                    {t._id.slice(0, 8)}…
+                    {t.entity_id ? ` · ${t.entity_id}` : ""}
+                    {" · "}
                     {t.time ? new Date(parseFloat(t.time) * 1000).toLocaleString() : "—"}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          {activeThread && (
+          {activeThread && !readOnly && (
             <div className="flex min-w-0 max-w-xl flex-1 flex-col gap-2">
               <Label title="Last _next string from loaded turns (same as agent loop payload).">
                 Continuity ID
@@ -540,7 +675,58 @@ export default function ChatInspect({ portfolio, org, tool, tree, query }: Agent
         </div>
       )}
 
-      {activeThread && entityType && entityId && (
+      {activeThread && entityType && messageEntityId && readOnly && (
+        <div className="min-h-[calc(100vh-280px)]">
+          <div className="relative flex h-[calc(100vh-280px)] min-h-0 flex-col">
+            <div className="pointer-events-none absolute left-0 right-0 top-0 z-10 h-8 shadow-[inset_0_20px_20px_-10px_rgba(0,0,0,0.3)]" />
+            <div className="relative flex-1 overflow-y-auto" id="messageContainer" onScroll={handleScroll}>
+              <div className="relative px-4 pb-16 sm:px-6">
+                {Array.isArray(messages) &&
+                  messages.map((m, index) => {
+                    const entries = turnEntries(m) ?? [];
+                    return (
+                      <div key={index} className="mb-4 flex flex-col">
+                        <div className="mb-2 mt-4 text-center text-sm text-muted-foreground">
+                          {m?.time
+                            ? new Date(m.time * 1000)
+                                .toLocaleString("en-US", {
+                                  weekday: "short",
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                  hour12: true,
+                                })
+                                .replace(/(\w+)\s+(\w+)\s+(\d+)\s+at/, "$1, $2 $3 at")
+                            : ""}
+                        </div>
+                        {entries.map((item, idx) => renderInspectRollItem(item, idx))}
+                      </div>
+                    );
+                  })}
+              </div>
+              <div className="sticky bottom-0 left-0 right-0 z-20 h-6">
+                <div className="pointer-events-none h-full bg-gradient-to-t from-background via-background/20 to-transparent" />
+                {!isAtBottom && (
+                  <div
+                    className="absolute bottom-2 left-1/2 -translate-x-1/2 transform cursor-pointer text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      document.getElementById("messageContainer")?.scrollTo({
+                        top: document.getElementById("messageContainer")?.scrollHeight,
+                        behavior: "smooth",
+                      });
+                    }}
+                  >
+                    <ChevronDown className="h-5 w-5 animate-bounce" />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeThread && entityType && messageEntityId && !readOnly && (
         <PanelGroup direction="horizontal" className="min-h-[calc(100vh-280px)]">
           <Panel defaultSize={35} minSize={20}>
             <span className="flex h-[calc(100vh-280px)] flex-col rounded-t-none">
