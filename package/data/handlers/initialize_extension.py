@@ -1,5 +1,6 @@
 from renglo.auth.auth_controller import AuthController
 from renglo.blueprint.blueprint_controller import BlueprintController
+from renglo.blueprint.extension_blueprints import ensure_extension_blueprints
 from renglo.common import load_config
 from renglo.data.data_controller import DataController
 from renglo.logger import get_logger
@@ -43,6 +44,17 @@ class InitializeExtension:
             }
 
         results = []
+        blueprints_step = self.ensure_blueprints()
+        results.append(blueprints_step)
+        if not blueprints_step.get("success"):
+            return {
+                "success": False,
+                "action": "initialize_extension",
+                "message": "Data initialization failed",
+                "input": payload,
+                "output": results,
+            }
+
         config_step = self.ensure_config(portfolio, org, payload)
         results.append(config_step)
         if not config_step.get("success"):
@@ -61,6 +73,9 @@ class InitializeExtension:
             "input": payload,
             "output": results,
         }
+
+    def ensure_blueprints(self):
+        return ensure_extension_blueprints(self.config, module_file=__file__)
 
     def ensure_config(self, portfolio, org, payload):
         action = "ensure_config"

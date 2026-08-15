@@ -7,6 +7,7 @@ from renglo.data.data_controller import DataController
 from renglo.files.files_controller import FilesController
 from renglo.auth.auth_controller import AuthController
 from renglo.blueprint.blueprint_controller import BlueprintController
+from renglo.blueprint.extension_blueprints import ensure_extension_blueprints
 from renglo.common import load_config
 
 
@@ -21,6 +22,7 @@ class DataOnboardings:
     def __init__(self):
         # Load config for handlers (independent of Flask)
         config = load_config()
+        self.config = config
         
         self.DAC = DataController(config=config)
         self.AUC = AuthController(config=config)
@@ -397,9 +399,16 @@ class DataOnboardings:
         
                  
     
+    def ensure_blueprints(self):
+        return ensure_extension_blueprints(self.config, module_file=__file__)
+
     def run(self,payload):
         
         results = []
+        blueprints_step = self.ensure_blueprints()
+        results.append(blueprints_step)
+        if not blueprints_step.get('success'):
+            return {'success': False, 'message': 'Could not install extension blueprints', 'input': payload, 'output': results}
         
         '''
         USE CASE 1: Install the tool in a new portfolio. 
