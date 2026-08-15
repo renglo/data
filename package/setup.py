@@ -14,9 +14,7 @@ setup(
     license="MIT",
     packages=find_packages(),
     python_requires=">=3.12",
-    install_requires=[
-        "flask>=3.0.0",
-    ],
+    install_requires=[],
     include_package_data=True,
     classifiers=[
         "Development Status :: 4 - Beta",

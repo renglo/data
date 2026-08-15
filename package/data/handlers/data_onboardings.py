@@ -1,6 +1,4 @@
 # operate_game.py
-from flask import current_app
-
 from datetime import datetime
 
 from renglo.data.data_controller import DataController
@@ -9,6 +7,7 @@ from renglo.auth.auth_controller import AuthController
 from renglo.blueprint.blueprint_controller import BlueprintController
 from renglo.blueprint.extension_blueprints import ensure_extension_blueprints
 from renglo.common import load_config
+from renglo.logger import get_logger
 
 
 '''
@@ -28,13 +27,14 @@ class DataOnboardings:
         self.AUC = AuthController(config=config)
         self.FCC = FilesController(config=config)
         self.BPC = BlueprintController(config=config)
+        self.logger = get_logger()
         self.bridge = {}
           
         
     def create_portfolio(self,name):
         
         action = 'create_portfolio'
-        current_app.logger.debug('Creating portfolio:'+name)
+        self.logger.debug('Creating portfolio:'+name)
         
         #1. Create Porfolio Document
         kwargs = {}
@@ -64,7 +64,7 @@ class DataOnboardings:
     def create_team(self,portfolio,name):
         
         action = 'create_team'
-        current_app.logger.debug('Creating team:'+name)
+        self.logger.debug('Creating team:'+name)
         
         kwargs = {}
         kwargs['name'] = name
@@ -96,7 +96,7 @@ class DataOnboardings:
     def create_team_portfolio_rel(self,portfolio,team):
         
         action = 'create_team_portfolio_rel'
-        current_app.logger.debug('Creating Team-Portfolio relationship')
+        self.logger.debug('Creating Team-Portfolio relationship')
         
         rel_data = {}
         rel_data['portfolio_id'] = portfolio #This is the portfolio_id
@@ -126,7 +126,7 @@ class DataOnboardings:
         
         #Part 1 : Team-User rel
         action='create_team_user_rel'
-        current_app.logger.debug('Creating the Team-User relationship')
+        self.logger.debug('Creating the Team-User relationship')
         
         rel_data = {}
         rel_data['user_id'] = self.AUC.get_current_user()
@@ -165,7 +165,7 @@ class DataOnboardings:
         #2. Create the tool entity (or refresh roles catalog if it already exists)
                 
         action = 'create_tool'
-        current_app.logger.debug('Installing default tool in portfolio')
+        self.logger.debug('Installing default tool in portfolio')
         
         # Opaque role strings interpreted by this extension's handlers.
         role_catalog = roles if roles is not None else ['viewer', 'editor', 'admin']
@@ -223,7 +223,7 @@ class DataOnboardings:
     def create_org(self,portfolio,name,handle):
         
         action = 'create_org'
-        current_app.logger.debug('Creating new org')
+        self.logger.debug('Creating new org')
         
         kwargs = {}
         kwargs['name'] = name
@@ -258,7 +258,7 @@ class DataOnboardings:
     def create_team_org_rel(self,team,tool,org):
         
         action = 'create_team_org_rel'
-        current_app.logger.debug('Create team to org rel')
+        self.logger.debug('Create team to org rel')
         
         rel_data = {}
         rel_data['team_id'] = team #This is the team_id
@@ -288,7 +288,7 @@ class DataOnboardings:
     def create_team_tool_org_rel(self,team,tool,org):
         
         action = 'create_team_tool_org_rel'
-        current_app.logger.debug('Create Team/Tool to org : DataEntry')
+        self.logger.debug('Create Team/Tool to org : DataEntry')
         
         rel_data = {}
         rel_data['team_id'] = team #This is the default team_id
