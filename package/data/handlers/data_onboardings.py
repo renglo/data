@@ -515,13 +515,8 @@ class DataOnboardings:
         
         
         
-        # It takes more than just creating a team-tool-org relationship to activate the tool. 
-        # You also need to create the job_docs and the config_doc for every org.
-        # If we are installing this tool in an existing Portfolio with existing orgs, we would need
-        # to run steps 9 and 10 in every org in that portfolio. The problem is that no orgs 
-        # are assigned to this tool in this case as the user needs to do it manually. 
-        # A Solution would be to run a check every time a team-tool-org rel is created (but that happens much after this onboarding script is run)
-        # What we could do here is to skip these steps if it is a installation on an existing portfolio.
+        # Per-org setup (config, jobs, …) runs in initialize_extension when a
+        # team is assigned to this tool in an org.
         
         '''  
         # Step 9: Create the job documents       
