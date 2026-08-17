@@ -14,8 +14,15 @@ def _get_data_onboardings():
     return DataOnboardings
 
 
+def _get_initialize_extension():
+    from data.handlers.initialize_extension import InitializeExtension
+
+    return InitializeExtension
+
+
 HANDLERS = {
     "data_onboardings": _get_data_onboardings,
+    "initialize_extension": _get_initialize_extension,
 }
 
 
