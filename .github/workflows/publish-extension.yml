@@ -131,6 +131,7 @@ jobs:
             --domain-owner "$ACCOUNT" \
             --repository "$REPO"
           cd ui
+          npm pkg delete private || true
           npm publish --access restricted
 
       - name: Publish to public npmjs
@@ -140,5 +141,6 @@ jobs:
         run: |
           set -euo pipefail
           cd ui
+          npm pkg delete private || true
           npm config set registry https://registry.npmjs.org/
           npm publish --access public
