@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "renglo-data"
-version = "1.0.0"
+version = "0.0.1"
 description = "Data extension custom handlers and utilities"
 license = { text = "MIT" }
 authors = [
@@ -21,3 +21,6 @@ dev = [
 
 [tool.setuptools]
 packages = ["data", "data.handlers"]
+
+[tool.setuptools.package-data]
+data = ["blueprints/*.json"]
