@@ -85,7 +85,7 @@ jobs:
           print(f"Staged {len(files)} blueprint(s) into {dest}")
           PY
           python -m build package
-          twine upload --repository codeartifact dist/*
+          twine upload --repository codeartifact package/dist/*
 
       - name: Publish to public PyPI
         if: ${{ vars.PUBLISH_PUBLIC == 'true' || github.event.inputs.publish_public == 'true' }}
@@ -95,7 +95,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --upgrade twine
-          twine upload dist/*
+          twine upload package/dist/*
 
   publish-npm:
     runs-on: ubuntu-latest
