@@ -1,13 +1,16 @@
 {
   "name": "@renglo/data",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "license": "MIT",
   "type": "module",
-  "main": "../data.tsx",
+  "main": "./data.tsx",
   "exports": {
-    ".": "../data.tsx",
+    ".": "./data.tsx",
     "./ui/*": "./*",
-    "./ui/navigation/*": "./navigation/*"
+    "./ui/navigation/*": "./navigation/*",
+    "./ui/onboarding/*": "./onboarding/*",
+    "./ui/components/*": "./components/*",
+    "./ui/pages/*": "./pages/*"
   },
   "peerDependencies": {
     "lucide-react": "^0.426.0",
