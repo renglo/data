@@ -4,7 +4,6 @@ Data Handlers Package.
 This package provides custom handlers for the Data extension.
 """
 
-__version__ = "1.0.0"
 __all__ = ["get_handler", "list_handlers", "HANDLERS"]
 
 
