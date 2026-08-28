@@ -3,11 +3,15 @@
   "version": "0.0.1",
   "license": "MIT",
   "type": "module",
-  "main": "../data.tsx",
+  "main": "./data.tsx",
   "exports": {
-    ".": "../data.tsx",
+    ".": "./data.tsx",
     "./ui/*": "./*",
-    "./ui/navigation/*": "./navigation/*"
+    "./pages/*": "./pages/*",
+    "./components/*": "./components/*",
+    "./navigation/*": "./navigation/*",
+    "./onboarding/*": "./onboarding/*",
+    "./utils/*": "./utils/*"
   },
   "peerDependencies": {
     "lucide-react": "^0.426.0",
