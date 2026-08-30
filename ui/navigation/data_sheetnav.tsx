@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { useState } from 'react';
 import { useWindowSize } from '@/contexts/WindowSizeContext';
+import { wlLogoUrl } from '@/lib/branding';
 
 
 interface ToolMenuProps {
@@ -50,7 +51,7 @@ export default function ToolDataSheetNav({portfolio,org,tool,section,onNavigate}
                     className="group flex h-11 w-11 shrink-0 items-center justify-center gap-2  md:h-8 md:w-8 md:text-base"     
                 > 
                     
-                    <img src={`${import.meta.env.VITE_WL_LOGO}`} className="ml-auto h-12 w-12" alt="Logo" />
+                    <img src={wlLogoUrl()} className="ml-auto h-12 w-12" alt="Logo" />
                     <span className="sr-only">Logo</span>
                 </button> 
                 <button
