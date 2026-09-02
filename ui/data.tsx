@@ -1,10 +1,11 @@
-import React from "react";
-import ToolDataDashboard from "./pages/tool_data_dashboard";
-import ToolDataTmpArtifact from "./pages/tool_data_tmp_artifact";
-import DataExplorer from "./pages/data_explorer";
-import ChatInspect from "./pages/chat_inspect"
-import GraphExplorer from "./pages/graph_explorer";
-import SearchExplorer from "./pages/search_explorer";
+import React, { lazy, Suspense } from "react";
+
+const ToolDataDashboard = lazy(() => import("./pages/tool_data_dashboard"));
+const ToolDataTmpArtifact = lazy(() => import("./pages/tool_data_tmp_artifact"));
+const DataExplorer = lazy(() => import("./pages/data_explorer"));
+const ChatInspect = lazy(() => import("./pages/chat_inspect"));
+const GraphExplorer = lazy(() => import("./pages/graph_explorer"));
+const SearchExplorer = lazy(() => import("./pages/search_explorer"));
 
 
 interface Portfolio {
@@ -40,30 +41,32 @@ export default function Data({ portfolio, org, tool, section, tree, query, onNav
     console.log('Data > Section/P1:',section, p1)
 
     const initialRing = (p1 || "").trim();
+    const page = !section || section === "undefined" ? undefined : section;
 
     return (
         <div className="flex min-h-screen w-full flex-col bg-muted/40">
         
           <div className="flex flex-col sm:gap-2 sm:pl-2">
-  
-            {section === undefined ? (
+            <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading…</div>}>
+            {page === undefined ? (
               <DataExplorer readonly={false} portfolio={portfolio} org={org} tool={tool} initialRing={initialRing}
               />
-              ) : section === "tmp_artifact" ? (
+              ) : page === "tmp_artifact" ? (
               <ToolDataTmpArtifact portfolio={portfolio} org={org} />
-              ) : section === "explorer" ? (
+              ) : page === "explorer" ? (
               <DataExplorer readonly={false} portfolio={portfolio} org={org} tool={tool} initialRing={initialRing}
               />
-              ) : section === "inspect" ? (
+              ) : page === "inspect" ? (
               <ChatInspect portfolio={portfolio} org={org} tool={tool} tree={tree} onNavigate={onNavigate} query={query} />
-              ) : section === "graph" ? (
+              ) : page === "graph" ? (
               <GraphExplorer portfolio={portfolio} org={org} />
-              ) : section === "search" ? (
+              ) : page === "search" ? (
               <SearchExplorer portfolio={portfolio} org={org} />
-              ) : section === "dashboard" ? (
+              ) : page === "dashboard" ? (
               <ToolDataDashboard />
               ) : null
               }
+            </Suspense>
           
           </div>
         </div>
