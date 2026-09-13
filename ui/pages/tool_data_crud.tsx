@@ -25,6 +25,7 @@ import { useState, useEffect, useRef} from 'react';
 
 import DataTable from "@/components/console/data-table"
 import ItemPreview from "@/components/console/item-preview"
+import BlueprintSpec from "@/components/console/blueprint-spec"
 import DialogPost from "@/components/console/dialog-post"
 import {
   Dialog,
@@ -204,6 +205,8 @@ export default function ToolDataCRUD({ readonly, portfolio, org, tool, ring }: T
                   <Card
                       className="sm:col-span-4"
                   >
+                      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,1fr)]">
+                      <div className="min-w-0">
                       <CardHeader className="pb-3">
                           <CardTitle>{blueprint.label}</CardTitle>
                           <CardDescription className="max-w-lg text-balance leading-relaxed">
@@ -242,6 +245,11 @@ export default function ToolDataCRUD({ readonly, portfolio, org, tool, ring }: T
                               />
                           )}
                       </CardFooter>
+                      </div>
+                      <div className="min-w-0 px-6 pb-6 pt-2 lg:pl-0 lg:pr-6 lg:pt-6">
+                        <BlueprintSpec blueprint={blueprint} />
+                      </div>
+                      </div>
                   </Card>
                 </div>
 

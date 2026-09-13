@@ -12,7 +12,7 @@ interface DataExplorerProps {
   initialRing?: string;
 }
 
-type ExplorerTab = "rings" | "vectors" | "kb";
+type ExplorerTab = "rings" | "vectors" | "vector_admin" | "kb";
 
 export default function DataExplorer({
   readonly,
@@ -54,6 +54,7 @@ export default function DataExplorer({
       <div className="flex flex-wrap gap-2 pt-1">
         {tabBtn("rings", "Rings")}
         {tabBtn("vectors", "Vectors")}
+        {tabBtn("vector_admin", "Vector admin")}
         {tabBtn("kb", "Knowledge base")}
       </div>
 
@@ -92,7 +93,11 @@ export default function DataExplorer({
       ) : null}
 
       {tab === "vectors" ? (
-        <VectorExplorerPanel portfolio={portfolio} org={org} readonly={readonly} />
+        <VectorExplorerPanel portfolio={portfolio} org={org} readonly={readonly} mode="query" />
+      ) : null}
+
+      {tab === "vector_admin" ? (
+        <VectorExplorerPanel portfolio={portfolio} org={org} readonly={readonly} mode="admin" />
       ) : null}
 
       {tab === "kb" ? <KbExplorerPanel portfolio={portfolio} org={org} /> : null}
