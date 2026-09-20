@@ -175,29 +175,29 @@ class DataOnboardings:
         kwargs['handle'] = handle
         kwargs['portfolio_id'] = portfolio #This is the portfolio_id
         kwargs['roles'] = role_catalog
+        self.bridge['portfolio_id'] = portfolio
 
-        # If tool already exists for this handle, refresh the roles catalog.
-        existing = self.AUC.list_entity('tool', portfolio_id=portfolio)
-        items = ((existing or {}).get('document') or {}).get('items') or []
-        for item in items:
-            if str(item.get('handle') or '') == handle:
-                tool_id = item.get('_id')
-                self.bridge['tool_id'] = tool_id
-                update = self.AUC.update_entity(
-                    'tool',
-                    portfolio_id=portfolio,
-                    tool_id=tool_id,
-                    payload={'roles': role_catalog},
-                )
-                return {
-                    'success': bool(update.get('success')),
-                    'action': action,
-                    'message': 'Tool roles catalog refreshed' if update.get('success') else 'Could not refresh tool roles',
-                    'input': kwargs,
-                    'output': update,
-                }
+        existing = self.AUC.find_installable_by_handle(portfolio, handle)
+        if existing:
+            item = existing.get('document') or {}
+            tool_id = item.get('_id')
+            self.bridge['tool_id'] = tool_id
+            update = self.AUC.update_entity(
+                existing['kind'],
+                portfolio_id=portfolio,
+                tool_id=tool_id,
+                extension_id=tool_id,
+                payload={'roles': role_catalog},
+            )
+            return {
+                'success': bool(update.get('success')),
+                'action': action,
+                'message': 'Tool roles catalog refreshed' if update.get('success') else 'Could not refresh tool roles',
+                'input': kwargs,
+                'output': update,
+            }
 
-        response = self.AUC.create_entity('tool',**kwargs)
+        response = self.AUC.create_entity('extension',**kwargs)
         self.bridge['tool_id'] = response['document']['_id']
 
         if not response['success']:
@@ -294,7 +294,12 @@ class DataOnboardings:
         rel_data['team_id'] = team #This is the default team_id
         rel_data['tool_id'] = tool #This is the default tool_id
         rel_data['org_id'] = org #This is the default org_id
-        response = self.AUC.create_rel('team/tool:org',**rel_data)
+        response = self.AUC.create_installable_org_rel(
+            self.bridge.get('portfolio_id'),
+            team,
+            tool,
+            org,
+        )
             
         if not response['success']:
             return{
