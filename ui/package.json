@@ -1,6 +1,6 @@
 {
   "name": "@renglo/data",
-  "version": "0.0.4",
+  "version": "0.0.5-rc.1",
   "license": "MIT",
   "type": "module",
   "main": "./data.tsx",
