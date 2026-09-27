@@ -1,0 +1,6 @@
+{
+  "handlers": {
+    "data_onboardings": "data.handlers.data_onboardings.DataOnboardings",
+    "initialize_extension": "data.handlers.initialize_extension.InitializeExtension"
+  }
+}
