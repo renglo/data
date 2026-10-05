@@ -26,4 +26,4 @@ packages = ["data", "data.handlers"]
 data = ["blueprints/*.json"]
 
 [tool.renglo]
-platform = "0.1.4"
+platform = "0.1.5"

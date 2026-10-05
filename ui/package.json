@@ -2,7 +2,7 @@
   "name": "@renglo/data",
   "version": "0.0.7-rc.1",
   "renglo": {
-    "platform": "0.1.4"
+    "platform": "0.1.5"
   },
   "license": "MIT",
   "type": "module",
