@@ -24,3 +24,6 @@ packages = ["data", "data.handlers"]
 
 [tool.setuptools.package-data]
 data = ["blueprints/*.json"]
+
+[tool.renglo]
+platform = "0.1.4"
