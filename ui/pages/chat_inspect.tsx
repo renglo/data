@@ -246,7 +246,7 @@ export default function ChatInspect({
         if (items.length === 0) {
           setActiveThread(null);
           setMessageEntityId("");
-          setLoadError("No Renglo threads for this session.");
+          setLoadError("No threads for this session.");
         } else {
           const activeT = items.find((t) => t.is_active) ?? items[0];
           selectThread(activeT);
@@ -661,7 +661,7 @@ export default function ChatInspect({
       {entityType && entityId && !loading && threads.items.length > 0 && (
         <div className="flex max-w-4xl flex-wrap items-end gap-4">
           <div className="flex min-w-[220px] flex-1 flex-col gap-2">
-            <Label htmlFor="inspect-thread-select">Renglo thread</Label>
+            <Label htmlFor="inspect-thread-select">Thread</Label>
             <Select
               value={activeThread ?? undefined}
               onValueChange={(v) => {
