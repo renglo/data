@@ -246,7 +246,7 @@ export default function ChatInspect({
         if (items.length === 0) {
           setActiveThread(null);
           setMessageEntityId("");
-          setLoadError("No Renglo threads for this session.");
+          setLoadError("No threads for this session.");
         } else {
           const activeT = items.find((t) => t.is_active) ?? items[0];
           selectThread(activeT);
@@ -425,12 +425,37 @@ export default function ChatInspect({
           : String(raw);
 
     if (ct === "user_message") {
+      let userText = clawText;
+      const traceLines: { label: string; value: string }[] = [];
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+        const body = raw as Record<string, unknown>;
+        userText = String(body.text ?? body.message ?? "");
+        const traceSpec: [string, string][] = [
+          ["WhatsApp wamid", "whatsapp_inbound_message_id"],
+          ["EventBridge event", "eventbridge_event_id"],
+          ["Edge receipt", "webhook_edge_receipt_id"],
+          ["Ingress request", "ingress_http_request_id"],
+          ["Body SHA-256", "webhook_envelope_sha256"],
+        ];
+        for (const [label, key] of traceSpec) {
+          if (body[key]) traceLines.push({ label, value: String(body[key]) });
+        }
+      }
       return (
         <div
           key={idx}
           className="mb-2 flex max-w-[80%] flex-col self-end rounded-xl bg-muted p-4 text-sm"
         >
-          {clawText}
+          {userText}
+          {traceLines.length > 0 ? (
+            <div className="mt-2 space-y-1 border-t border-border/60 pt-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+              {traceLines.map((row) => (
+                <div key={row.label}>
+                  {row.label} · {row.value}
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       );
     }
@@ -636,7 +661,7 @@ export default function ChatInspect({
       {entityType && entityId && !loading && threads.items.length > 0 && (
         <div className="flex max-w-4xl flex-wrap items-end gap-4">
           <div className="flex min-w-[220px] flex-1 flex-col gap-2">
-            <Label htmlFor="inspect-thread-select">Renglo thread</Label>
+            <Label htmlFor="inspect-thread-select">Thread</Label>
             <Select
               value={activeThread ?? undefined}
               onValueChange={(v) => {
