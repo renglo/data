@@ -1,6 +1,7 @@
 import { useMemo } from "react";
-import { Download, Star, Telescope } from "lucide-react";
+import { Download, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import ExtensionIcon from "@/components/console/extension-icon";
 import { Card, CardContent } from "@/components/ui/card";
 import DialogPost from "@/components/console/dialog-post";
 
@@ -101,7 +102,7 @@ export default function DataOnboarding({ tree }: OnboardingProps) {
       </div>
       <CardContent className="p-5">
         <div className="mb-4 flex items-start gap-4">
-          <Telescope size={68} />
+          <ExtensionIcon handle="data" name="Data" size="lg" />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h3 className="truncate font-semibold text-foreground">Data App</h3>
