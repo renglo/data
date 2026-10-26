@@ -1,8 +1,8 @@
 {
   "name": "@renglo/data",
-  "version": "0.0.11",
+  "version": "0.0.12-rc.1",
   "renglo": {
-    "platform": "0.1.8"
+    "platform": "0.1.10"
   },
   "license": "MIT",
   "type": "module",
