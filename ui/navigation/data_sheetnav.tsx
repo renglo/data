@@ -3,6 +3,8 @@ import {
   EllipsisVertical,
   Database,
   Orbit,
+  LineChart,
+  Sparkles,
 } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
@@ -74,6 +76,26 @@ export default function ToolDataSheetNav({portfolio,org,tool,section,onNavigate}
                 >
                     <Orbit className="h-5 w-5" />
                     Search Explorer
+                </button>
+                <button
+                    onClick={() => {
+                        setOpen(false);
+                        onNavigate(`/${portfolio}/${org}/${tool}/timeseries`);
+                    }}
+                    className="flex items-center gap-4 px-2.5 text-foreground"
+                >
+                    <LineChart className="h-5 w-5" />
+                    TimeSeries explorer
+                </button>
+                <button
+                    onClick={() => {
+                        setOpen(false);
+                        onNavigate(`/${portfolio}/${org}/${tool}/llm`);
+                    }}
+                    className="flex items-center gap-4 px-2.5 text-foreground"
+                >
+                    <Sparkles className="h-5 w-5" />
+                    LLM explorer
                 </button>
                 
                 <span className="relative hidden">

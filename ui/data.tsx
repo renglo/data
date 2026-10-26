@@ -6,6 +6,8 @@ const DataExplorer = lazy(() => import("./pages/data_explorer"));
 const ChatInspect = lazy(() => import("./pages/chat_inspect"));
 const GraphExplorer = lazy(() => import("./pages/graph_explorer"));
 const SearchExplorer = lazy(() => import("./pages/search_explorer"));
+const TimeSeriesExplorer = lazy(() => import("./pages/timeseries_explorer"));
+const LlmExplorer = lazy(() => import("./pages/llm_explorer"));
 
 
 interface Portfolio {
@@ -62,6 +64,10 @@ export default function Data({ portfolio, org, tool, section, tree, query, onNav
               <GraphExplorer portfolio={portfolio} org={org} />
               ) : page === "search" ? (
               <SearchExplorer portfolio={portfolio} org={org} />
+              ) : page === "timeseries" ? (
+              <TimeSeriesExplorer portfolio={portfolio} org={org} />
+              ) : page === "llm" ? (
+              <LlmExplorer portfolio={portfolio} org={org} />
               ) : page === "dashboard" ? (
               <ToolDataDashboard />
               ) : null

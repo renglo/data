@@ -5,6 +5,7 @@ import {
   Microscope,
   Orbit,
   Search,
+  Sparkles,
 } from "lucide-react"
 
 import {
@@ -171,6 +172,52 @@ export default function ToolDataSideNav({portfolio,org,tool,section,onNavigate}:
               </div>
             </TooltipTrigger>
             <TooltipContent side="right">Search</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      <TooltipProvider>
+        <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center flex-col">
+                <button
+                onClick={() => onNavigate(`/${portfolio}/${org}/${tool}/timeseries`)}
+                className={
+                  section === 'timeseries'
+                    ? 'group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full bg-gray-200 text-lg font-semibold text-muted-foreground md:h-12 md:w-12 md:text-base'
+                    : 'flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8'
+                }
+                >
+                  <LineChart className="h-5 w-5" />
+                  <span className="sr-only">TimeSeries</span>
+                </button>
+
+                <span className="text-xxs ">Series</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="right">TimeSeries explorer</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
+      <TooltipProvider>
+        <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center flex-col">
+                <button
+                onClick={() => onNavigate(`/${portfolio}/${org}/${tool}/llm`)}
+                className={
+                  section === 'llm'
+                    ? 'group flex h-9 w-9 shrink-0 items-center justify-center gap-2 rounded-full bg-gray-200 text-lg font-semibold text-muted-foreground md:h-12 md:w-12 md:text-base'
+                    : 'flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground md:h-8 md:w-8'
+                }
+                >
+                  <Sparkles className="h-5 w-5" />
+                  <span className="sr-only">LLM</span>
+                </button>
+
+                <span className="text-xxs ">LLM</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="right">LLM explorer</TooltipContent>
         </Tooltip>
       </TooltipProvider>
 
