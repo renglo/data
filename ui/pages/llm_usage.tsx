@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { Activity, BarChart3, ChevronDown, Clock, Layers, LineChart, RefreshCw, Zap } from "lucide-react"
 
 interface LlmUsageProps {
   portfolio: string
@@ -7,7 +8,7 @@ interface LlmUsageProps {
 }
 
 type Range = "hour" | "day"
-type Metric = "requests" | "tokens" | "cost" | "latency"
+type ChartView = "line" | "bar"
 
 const SERIES = [
   "llm.requests",
@@ -46,35 +47,13 @@ type ChartSeries = {
   points: ChartPoint[]
 }
 
-const METRIC_COLORS = {
-  requests: "#2f80ed",
-  input: "#ef6351",
-  output: "#5b8c5a",
-  cost: "#7c6cf0",
-  latency: "#2f80ed",
-}
+const MODEL_COLORS = ["#2f80ed", "#7c6cf0", "#ef6351", "#5b8c5a", "#d97706", "#3e5b7b"]
 
-const usageCss = `
-.llm-usage .toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-top: 16px; }
-.llm-usage .toolbar label { margin: 0; min-width: 160px; flex: 0 1 200px; }
-.llm-usage .segmented { display: flex; border: 1px solid #e3e7ed; border-radius: 6px; padding: 2px; background: #f8f9fb; }
-.llm-usage .segmented button { background: transparent; border: 0; padding: 6px 10px; border-radius: 4px; color: #7b8594; font-size: 11px; font-weight: 700; }
-.llm-usage .segmented button.active { background: #fff; color: #273241; box-shadow: 0 1px 3px #dfe3e8; }
-.llm-usage .refresh { border: 1px solid #e3e7ed; background: #fff; color: #5d6877; border-radius: 7px; padding: 7px 12px; font-size: 11px; font-weight: 700; }
-.llm-usage .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-top: 18px; }
-.llm-usage .card { background: #f8f9fb; border: 1px solid #eef1f5; border-radius: 8px; padding: 12px; }
-.llm-usage .card span { display: block; color: #8a94a2; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.llm-usage .card strong { display: block; margin-top: 4px; color: #1d2633; font-size: 18px; letter-spacing: -.03em; }
-.llm-usage .chart-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 22px; }
-.llm-usage .chart-head p { margin: 0; }
-.llm-usage .legend { display: flex; gap: 16px; margin: 8px 0 0; color: #72808f; font-size: 10px; flex-wrap: wrap; }
-.llm-usage .legend span { display: flex; gap: 6px; align-items: center; }
-.llm-usage .legend i { width: 14px; height: 3px; border-radius: 3px; }
-.llm-usage .chart { display: block; width: 100%; height: auto; margin-top: 4px; }
-.llm-usage .grid-line { stroke: #edf0f3; stroke-width: 1; }
-.llm-usage .axis-label { fill: #9aa3ae; font-size: 10px; }
-.llm-usage .table-wrap { overflow-x: auto; }
-`
+function colorFor(name: string) {
+  let hash = 0
+  for (let index = 0; index < name.length; index += 1) hash = (hash * 31 + name.charCodeAt(index)) >>> 0
+  return MODEL_COLORS[hash % MODEL_COLORS.length]
+}
 
 function timeWindow(range: Range, now: number) {
   if (range === "hour") return { start: now - 60 * 60 * 1000, end: now }
@@ -127,10 +106,32 @@ function formatLatency(value: number | null) {
   return `${(value / 1000).toFixed(2)} s`
 }
 
-function formatAxis(metric: Metric, value: number) {
-  if (metric === "cost") return formatMoney(value)
-  if (metric === "latency") return value >= 1000 ? `${(value / 1000).toFixed(1)}s` : `${Math.round(value)}`
+function formatCompact(value: number) {
+  if (!Number.isFinite(value)) return "—"
+  const abs = Math.abs(value)
+  const sign = value < 0 ? "-" : ""
+  if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`
+  if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(abs >= 10_000 ? 0 : 1)}k`
   return formatCount(value)
+}
+
+function regression(points: { x: number; y: number }[]) {
+  const count = points.length
+  if (count < 2) return null
+  let sumX = 0
+  let sumY = 0
+  let sumXY = 0
+  let sumXX = 0
+  for (const point of points) {
+    sumX += point.x
+    sumY += point.y
+    sumXY += point.x * point.y
+    sumXX += point.x * point.x
+  }
+  const denom = count * sumXX - sumX * sumX
+  if (!denom) return null
+  const slope = (count * sumXY - sumX * sumY) / denom
+  return { slope, intercept: (sumY - slope * sumX) / count }
 }
 
 async function loadSeries(portfolio: string, org: string, key: SeriesKey, year: string) {
@@ -195,58 +196,125 @@ function toChartSeries(name: string, color: string, points: ChartPoint[]): Chart
   return { name, color, points }
 }
 
-function UsageChart({ series, metric, domain, range }: { series: ChartSeries[]; metric: Metric; domain: { start: number; end: number }; range: Range }) {
-  const width = 900
-  const height = 240
-  const pad = { t: 16, r: 16, b: 32, l: 56 }
-  const points = series.flatMap((item) => item.points)
-  if (!points.length) return <p className="empty">No readings for this metric.</p>
+function UsageChart({ series, view, domain, range }: { series: ChartSeries[]; view: ChartView; domain: { start: number; end: number }; range: Range }) {
+  const width = 640
+  const height = 176
+  const pad = { t: 10, r: 8, b: 24, l: 46 }
+  const drawn = series.filter((item) => item.points.length)
+  const points = drawn.flatMap((item) => item.points)
+  if (!points.length) return <p className="empty">No token readings for this range.</p>
   const minX = domain.start
   const maxX = domain.end > domain.start ? domain.end : domain.start + 1
   const minY = Math.min(0, ...points.map((point) => point.y))
   const maxY = Math.max(...points.map((point) => point.y))
   const ySpan = maxY - minY || Math.abs(maxY) || 1
   const yMax = maxY + ySpan * 0.08
-  const plotX = (x: number) => {
-    const inner = width - pad.l - pad.r
-    if (maxX === minX) return pad.l + inner / 2
-    return pad.l + ((x - minX) / (maxX - minX)) * inner
-  }
+  const innerW = width - pad.l - pad.r
+  const plotX = (x: number) => pad.l + ((x - minX) / (maxX - minX)) * innerW
   const plotY = (y: number) => height - pad.b - ((y - minY) / (yMax - minY)) * (height - pad.t - pad.b)
-  const yTicks = [minY, minY + (yMax - minY) / 2, yMax]
-  const xTicks = Array.from({ length: 7 }, (_, index) => minX + ((maxX - minX) * index) / 6)
+  const yTicks = [0, 1, 2, 3].map((index) => minY + ((yMax - minY) * index) / 3)
+  const xTicks = Array.from({ length: 6 }, (_, index) => minX + ((maxX - minX) * index) / 5)
+  const bucket = range === "hour" ? 60_000 : 3_600_000
+  const groupWidth = Math.min(28, Math.max(3, (bucket / (maxX - minX)) * innerW * 0.7))
+  const barWidth = groupWidth / Math.max(drawn.length, 1)
   return (
-    <svg className="chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="LLM usage chart">
-      {yTicks.map((value) => {
+    <svg className="chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Token usage chart">
+      <defs>
+        <linearGradient id="llm-token-fill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor="#2f80ed" stopOpacity="0.18" />
+          <stop offset="1" stopColor="#2f80ed" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {yTicks.map((value, index) => {
         const y = plotY(value)
         return (
-          <g key={value}>
+          <g key={index}>
             <line x1={pad.l} x2={width - pad.r} y1={y} y2={y} className="grid-line" />
-            <text x={pad.l - 8} y={y + 3} textAnchor="end" className="axis-label">{formatAxis(metric, value)}</text>
+            <text x={pad.l - 8} y={y + 3} textAnchor="end" className="axis-label">{formatCompact(value)}</text>
           </g>
         )
       })}
       {xTicks.map((value) => (
-        <text key={value} x={plotX(value)} y={height - 8} textAnchor="middle" className="axis-label">{formatTick(value, range)}</text>
+        <text key={value} x={plotX(value)} y={height - 6} textAnchor="middle" className="axis-label">{formatTick(value, range)}</text>
       ))}
-      {series.map((item) => (
+      {view === "line" ? drawn.map((item) => {
+        const coords = item.points.map((point) => ({ x: plotX(point.x), y: plotY(point.y) }))
+        const first = coords[0]
+        const last = coords[coords.length - 1]
+        if (!first || !last) return null
+        if (coords.length === 1) return <circle key={item.name} cx={first.x} cy={first.y} r="3.5" fill={item.color} />
+        const path = coords.map((point, pointIndex) => `${pointIndex === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ")
+        const area = `${path} L ${last.x} ${plotY(minY)} L ${first.x} ${plotY(minY)} Z`
+        const outputSeries = item.name === "Output tokens"
+        return (
+          <g key={item.name}>
+            {outputSeries ? null : <path d={area} fill="url(#llm-token-fill)" />}
+            <path d={path} fill="none" stroke={item.color} strokeWidth={outputSeries ? 2 : 2.4} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={outputSeries ? "4 4" : undefined} />
+          </g>
+        )
+      }) : drawn.map((item, seriesIndex) => (
         <g key={item.name}>
-          {item.points.length > 1 ? (
-            <polyline
-              points={item.points.map((point) => `${plotX(point.x)},${plotY(point.y)}`).join(" ")}
-              fill="none"
-              stroke={item.color}
-              strokeWidth="2.25"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          ) : null}
-          {item.points.map((point) => (
-            <circle key={`${item.name}-${point.x}`} cx={plotX(point.x)} cy={plotY(point.y)} r="3.5" fill={item.color} />
-          ))}
+          {item.points.map((point) => {
+            const x = plotX(point.x) - groupWidth / 2 + seriesIndex * barWidth
+            const y = plotY(point.y)
+            return <rect key={point.x} x={x} y={y} width={Math.max(barWidth - 1, 1)} height={Math.max(0, plotY(minY) - y)} fill={item.color} opacity={item.name === "Output tokens" ? 0.55 : 0.9} rx="1.5" />
+          })}
         </g>
       ))}
     </svg>
+  )
+}
+
+function CostScatter({ points }: { points: { name: string; tokens: number; cost: number; color: string }[] }) {
+  const plotted = points.filter((point) => point.tokens > 0 || point.cost > 0)
+  if (!plotted.length) return <p className="empty">No cost readings for this range.</p>
+  const width = 320
+  const height = 155
+  const pad = { l: 28, r: 10, t: 14, b: 18 }
+  const maxX = Math.max(...plotted.map((point) => point.tokens), 1)
+  const maxY = Math.max(...plotted.map((point) => point.cost), 1e-9)
+  const xOf = (value: number) => pad.l + (value / maxX) * (width - pad.l - pad.r)
+  const yOf = (value: number) => height - pad.b - (value / maxY) * (height - pad.t - pad.b)
+  const fit = regression(plotted.map((point) => ({ x: point.tokens, y: point.cost })))
+  return (
+    <div className="scatter">
+      <span className="scatter-y">cost</span>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Cost against total tokens">
+        {[0.25, 0.5, 0.75, 1].map((step) => (
+          <line key={step} x1={pad.l} x2={width - pad.r} y1={yOf(maxY * step)} y2={yOf(maxY * step)} stroke="#e3e7ed" strokeDasharray="3 5" />
+        ))}
+        {fit ? (
+          <line
+            x1={xOf(0)}
+            y1={yOf(Math.min(maxY, Math.max(0, fit.intercept)))}
+            x2={xOf(maxX)}
+            y2={yOf(Math.min(maxY, Math.max(0, fit.intercept + fit.slope * maxX)))}
+            stroke="#94a3b8"
+            strokeDasharray="5 5"
+          />
+        ) : null}
+        {plotted.map((point) => (
+          <g key={point.name}>
+            <title>{`${point.name}: ${formatCompact(point.tokens)} tokens, ${formatMoney(point.cost)}`}</title>
+            <circle cx={xOf(point.tokens)} cy={yOf(point.cost)} r="4" fill={point.color} />
+          </g>
+        ))}
+      </svg>
+      <span className="scatter-x">tokens</span>
+    </div>
+  )
+}
+
+function MetricCard({ title, value, note, color, icon: Icon }: { title: string; value: string; note: string; color: string; icon: typeof Zap }) {
+  return (
+    <div className="metric-card">
+      <div className="metric-top">
+        <span>{title}</span>
+        <span className="metric-icon" style={{ color }}><Icon size={16} /></span>
+      </div>
+      <strong>{value}</strong>
+      <div className="metric-note">{note}</div>
+    </div>
   )
 }
 
@@ -254,7 +322,7 @@ export default function LlmUsage({ portfolio, org, revision }: LlmUsageProps) {
   const [range, setRange] = useState<Range>("hour")
   const [provider, setProvider] = useState("all")
   const [model, setModel] = useState("all")
-  const [metric, setMetric] = useState<Metric>("requests")
+  const [view, setView] = useState<ChartView>("line")
   const [documents, setDocuments] = useState<UsageDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -342,17 +410,15 @@ export default function LlmUsage({ portfolio, org, revision }: LlmUsageProps) {
     return total
   }, [inView])
 
-  const chartSeries = useMemo(() => {
-    if (metric === "tokens") {
-      return [
-        toChartSeries("Input tokens", METRIC_COLORS.input, bucketed(inView, "llm.input_tokens", "sum", range)),
-        toChartSeries("Output tokens", METRIC_COLORS.output, bucketed(inView, "llm.output_tokens", "sum", range)),
-      ].filter((item) => item.points.length)
-    }
-    if (metric === "cost") return [toChartSeries("Estimated cost", METRIC_COLORS.cost, bucketed(inView, "llm.cost_usd", "sum", range))]
-    if (metric === "latency") return [toChartSeries("Average latency", METRIC_COLORS.latency, bucketed(inView, "llm.latency_ms", "avg", range))]
-    return [toChartSeries("Requests", METRIC_COLORS.requests, bucketed(inView, "llm.requests", "sum", range))]
-  }, [inView, metric, range])
+  const tokenSeries = useMemo(() => [
+    toChartSeries("Input tokens", "#2f80ed", bucketed(inView, "llm.input_tokens", "sum", range)),
+    toChartSeries("Output tokens", "#7c6cf0", bucketed(inView, "llm.output_tokens", "sum", range)),
+  ], [inView, range])
+
+  const latencyPoints = useMemo(
+    () => bucketed(inView, "llm.latency_ms", "avg", range),
+    [inView, range],
+  )
 
   const rows = useMemo(() => {
     const grouped = new Map<string, {
@@ -399,104 +465,202 @@ export default function LlmUsage({ portfolio, org, revision }: LlmUsageProps) {
     return [...grouped.values()].sort((left, right) => right.requests - left.requests || left.provider.localeCompare(right.provider) || left.model.localeCompare(right.model))
   }, [inView])
 
+  const modelPoints = useMemo(() => {
+    const grouped = new Map<string, { name: string; tokens: number; cost: number; requests: number }>()
+    for (const row of rows) {
+      const current = grouped.get(row.model) || { name: row.model, tokens: 0, cost: 0, requests: 0 }
+      current.tokens += row.input + row.output
+      current.cost += row.cost
+      current.requests += row.requests
+      grouped.set(row.model, current)
+    }
+    return [...grouped.values()]
+      .sort((left, right) => right.requests - left.requests || left.name.localeCompare(right.name))
+      .map((point) => ({ ...point, color: colorFor(point.name) }))
+  }, [rows])
+
   const hasUsage = inView.length > 0
+  const waiting = loading && !hasUsage && !error
   const latency = totals.latencyCount ? totals.latencySum / totals.latencyCount : null
+  const latencyPeak = latencyPoints.length ? Math.max(...latencyPoints.map((point) => point.y)) : null
+  const tokenTotal = totals.input + totals.output
+  const inputShare = tokenTotal ? (totals.input / tokenTotal) * 100 : 0
+  const outputShare = tokenTotal ? (totals.output / tokenTotal) * 100 : 0
+  const avgOutput = totals.requests ? Math.round(totals.output / totals.requests) : null
+  const rangeLabel = range === "hour" ? "Last 60 minutes" : "Today"
 
   return (
-    <section className="panel llm-usage">
-      <style>{usageCss}</style>
-      <div className="panel-header">
-        <div>
-          <h3>Usage</h3>
-          <p>Last 60 minutes by default. Today is the local day, by provider, model, status, and extension.</p>
-        </div>
-        <button type="button" className="refresh" onClick={() => setRefreshTick((value) => value + 1)} disabled={loading}>
-          {loading ? "Loading…" : "Refresh"}
-        </button>
-      </div>
-      <div className="toolbar">
-        <div className="segmented" role="group" aria-label="Range">
-          <button type="button" className={range === "hour" ? "active" : ""} onClick={() => setRange("hour")}>Last 60 minutes</button>
-          <button type="button" className={range === "day" ? "active" : ""} onClick={() => setRange("day")}>Day</button>
-        </div>
-        <label>Provider
+    <>
+      <div className="filters">
+        <label className="select-box">
+          <span className="select-label">Provider</span>
           <select value={provider} onChange={(event) => setProvider(event.target.value)}>
             <option value="all">All providers</option>
             {providers.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
+          <ChevronDown size={14} />
         </label>
-        <label>Model
+        <label className="select-box">
+          <span className="select-label">Model</span>
           <select value={models.includes(model) ? model : "all"} onChange={(event) => setModel(event.target.value)}>
             <option value="all">All models</option>
             {models.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
+          <ChevronDown size={14} />
         </label>
+        <label className="select-box">
+          <span className="select-label">Time window</span>
+          <select value={range} onChange={(event) => setRange(event.target.value as Range)}>
+            <option value="hour">Last 60 minutes</option>
+            <option value="day">Today</option>
+          </select>
+          <ChevronDown size={14} />
+        </label>
+        <div className="filter-spacer" />
+        <button type="button" className="filter-button" onClick={() => setRefreshTick((value) => value + 1)} disabled={loading}>
+          <RefreshCw size={15} className={loading ? "spin" : undefined} />
+          Refresh
+        </button>
       </div>
       {error ? <p className="notice" role="alert">{error}</p> : null}
-      {!error && loading && !hasUsage ? <p className="empty">Loading usage…</p> : null}
-      {!error && !loading && !hasUsage ? <p className="empty">No LLM usage recorded for this range.</p> : null}
-      {hasUsage ? (
+      {waiting ? <p className="empty">Loading usage…</p> : null}
+      {!error && !waiting ? (
         <>
-          <div className="cards">
-            <div className="card"><span>Requests</span><strong>{formatCount(totals.requests)}</strong></div>
-            <div className="card"><span>Errors</span><strong>{formatCount(totals.errors)}</strong></div>
-            <div className="card"><span>Input tokens</span><strong>{formatCount(totals.input)}</strong></div>
-            <div className="card"><span>Output tokens</span><strong>{formatCount(totals.output)}</strong></div>
-            <div className="card"><span>Estimated cost</span><strong>{formatMoney(totals.cost)}</strong></div>
-            <div className="card"><span>Avg latency</span><strong>{formatLatency(latency)}</strong></div>
+          <div className="metric-grid">
+            <MetricCard title="Total requests" value={formatCount(totals.requests)} note={`${formatCount(totals.errors)} errors`} color="#d97706" icon={Zap} />
+            <MetricCard title="Total cost" value={formatMoney(totals.cost)} note="Estimated" color="#7c6cf0" icon={Activity} />
+            <MetricCard title="Avg. latency" value={formatLatency(latency)} note={rangeLabel} color="#2f80ed" icon={Clock} />
+            <MetricCard title="Tokens processed" value={formatCompact(tokenTotal)} note={`${formatCompact(totals.input)} in · ${formatCompact(totals.output)} out`} color="#5b8c5a" icon={Layers} />
           </div>
-          <div className="chart-head">
-            <p>{range === "hour" ? "Last 60 minutes, one point per minute." : "Today, one point per hour."}</p>
-            <div className="segmented" role="group" aria-label="Chart metric">
-              {(["requests", "tokens", "cost", "latency"] as Metric[]).map((item) => (
-                <button key={item} type="button" className={metric === item ? "active" : ""} onClick={() => setMetric(item)}>
-                  {item === "requests" ? "Requests" : item === "tokens" ? "Tokens" : item === "cost" ? "Cost" : "Latency"}
-                </button>
-              ))}
-            </div>
+          <div className="dashboard-grid">
+            <section className="panel chart-panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Token usage</h2>
+                  <p>{range === "hour" ? "Last 60 minutes, one point per minute." : "Today, one point per hour."}</p>
+                </div>
+                <div className="segmented" role="group" aria-label="Chart view">
+                  <button type="button" className={view === "line" ? "active" : ""} onClick={() => setView("line")}><LineChart size={14} />Line</button>
+                  <button type="button" className={view === "bar" ? "active" : ""} onClick={() => setView("bar")}><BarChart3 size={14} />Bars</button>
+                </div>
+              </div>
+              <div className="legend">
+                <span><i className="dot cyan" />Input tokens</span>
+                <span><i className="dot violet" />Output tokens</span>
+                <span className="chart-stat">{formatCompact(tokenTotal)} total</span>
+              </div>
+              <UsageChart series={tokenSeries} view={view} domain={span} range={range} />
+            </section>
+            <section className="panel donut-panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Token composition</h2>
+                  <p>By direction · {rangeLabel.toLowerCase()}</p>
+                </div>
+              </div>
+              <div className="donut-content">
+                <div className="donut" style={{ background: tokenTotal ? `conic-gradient(#2f80ed 0 ${inputShare}%, #7c6cf0 ${inputShare}% 100%)` : "#e8edf2" }}>
+                  <div className="donut-hole"><strong>{formatCompact(tokenTotal)}</strong><span>tokens</span></div>
+                </div>
+                <div className="donut-legend">
+                  <div><i className="dot cyan" /><span>Input</span><strong>{formatCompact(totals.input)} <small>{tokenTotal ? `${inputShare.toFixed(1)}%` : "—"}</small></strong></div>
+                  <div><i className="dot violet" /><span>Output</span><strong>{formatCompact(totals.output)} <small>{tokenTotal ? `${outputShare.toFixed(1)}%` : "—"}</small></strong></div>
+                  <div className="donut-foot"><span>Avg. output / request</span><strong>{avgOutput == null ? "—" : `${formatCount(avgOutput)} tokens`}</strong></div>
+                </div>
+              </div>
+            </section>
+            <section className="panel scatter-panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Cost efficiency</h2>
+                  <p>Cost against total tokens</p>
+                </div>
+              </div>
+              <CostScatter points={modelPoints} />
+              {modelPoints.length ? (
+                <div className="scatter-footer">
+                  {modelPoints.map((point) => (
+                    <span key={point.name}><i className="dot" style={{ background: point.color }} />{point.name}</span>
+                  ))}
+                </div>
+              ) : null}
+            </section>
           </div>
-          <div className="legend">
-            {chartSeries.map((item) => (
-              <span key={item.name}><i style={{ backgroundColor: item.color }} />{item.name}</span>
-            ))}
-          </div>
-          <UsageChart series={chartSeries} metric={metric} domain={span} range={range} />
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Provider</th>
-                  <th>Model</th>
-                  <th>Status</th>
-                  <th>Extension</th>
-                  <th>Requests</th>
-                  <th>Errors</th>
-                  <th>In</th>
-                  <th>Out</th>
-                  <th>Avg latency</th>
-                  <th>Cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={`${row.provider}-${row.model}-${row.status}-${row.extension}`}>
-                    <td>{row.provider}</td>
-                    <td>{row.model}</td>
-                    <td>{row.status}</td>
-                    <td>{row.extension}</td>
-                    <td>{formatCount(row.requests)}</td>
-                    <td>{formatCount(row.errors)}</td>
-                    <td>{formatCount(row.input)}</td>
-                    <td>{formatCount(row.output)}</td>
-                    <td>{formatLatency(row.latencyCount ? row.latencySum / row.latencyCount : null)}</td>
-                    <td>{formatMoney(row.cost)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="bottom-grid">
+            <section className="panel models-panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Model share</h2>
+                  <p>Requests and cost by provider, model, status, and extension.</p>
+                </div>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Model</th>
+                      <th>Provider</th>
+                      <th>Status</th>
+                      <th>Extension</th>
+                      <th>Requests</th>
+                      <th>Share</th>
+                      <th>Errors</th>
+                      <th>Input</th>
+                      <th>Output</th>
+                      <th>Avg latency</th>
+                      <th>Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.length ? rows.map((row) => {
+                      const share = totals.requests ? (row.requests / totals.requests) * 100 : 0
+                      return (
+                        <tr key={`${row.provider}-${row.model}-${row.status}-${row.extension}`}>
+                          <td className="model-name"><i className="dot" style={{ background: colorFor(row.model) }} />{row.model}</td>
+                          <td>{row.provider}</td>
+                          <td>{row.status}</td>
+                          <td>{row.extension}</td>
+                          <td>{formatCount(row.requests)}</td>
+                          <td><b className="share-bar"><i style={{ width: `${share}%` }} /></b>{share.toFixed(1)}%</td>
+                          <td>{formatCount(row.errors)}</td>
+                          <td>{formatCount(row.input)}</td>
+                          <td>{formatCount(row.output)}</td>
+                          <td>{formatLatency(row.latencyCount ? row.latencySum / row.latencyCount : null)}</td>
+                          <td>{formatMoney(row.cost)}</td>
+                        </tr>
+                      )
+                    }) : (
+                      <tr><td className="empty" colSpan={11}>No LLM usage recorded for this range.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section className="panel latency-panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Latency</h2>
+                  <p>{rangeLabel}</p>
+                </div>
+              </div>
+              {latencyPoints.length ? (
+                <div className="latency-chart">
+                  <div className="latency-bars">
+                    {latencyPoints.map((point) => (
+                      <i key={point.x} style={{ height: `${latencyPeak ? Math.max(2, (point.y / latencyPeak) * 100) : 0}%` }} title={`${point.label}: ${formatLatency(point.y)}`} />
+                    ))}
+                  </div>
+                </div>
+              ) : <p className="empty">No latency readings for this range.</p>}
+              <div className="latency-labels">
+                <span>avg <b>{formatLatency(latency)}</b></span>
+                <span>peak <b>{formatLatency(latencyPeak)}</b></span>
+                <span>errors <b>{formatCount(totals.errors)}</b></span>
+              </div>
+            </section>
           </div>
         </>
       ) : null}
-    </section>
+    </>
   )
 }
