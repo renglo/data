@@ -1,6 +1,6 @@
 {
   "name": "@renglo/data",
-  "version": "0.0.12",
+  "version": "0.0.13-rc.1",
   "renglo": {
     "platform": "0.1.10"
   },
