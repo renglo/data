@@ -103,6 +103,15 @@ const planeCss = `
 .llm-plane .select-box select:disabled { color: #8a94a2; cursor: default; }
 .llm-plane .select-box option { color: #1d2633; background: #fff; }
 .llm-plane .select-box > svg { margin-left: auto; color: #9aa3af; flex-shrink: 0; pointer-events: none; }
+.llm-plane .time-controls { display: flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border: 1px solid #e3e7ed; border-radius: 7px; background: #fff; }
+.llm-plane .time-controls:focus-within { border-color: #9fb3cf; box-shadow: 0 0 0 3px #edf3fb; }
+.llm-plane .time-controls .icon-btn { width: 26px; height: 26px; border-radius: 5px; }
+.llm-plane .time-controls .icon-btn:disabled:hover { background: transparent; color: #5d6877; }
+.llm-plane .granularity { display: flex; align-items: center; gap: 1px; border-left: 1px solid #e3e7ed; border-right: 1px solid #e3e7ed; padding: 0 3px; }
+.llm-plane .granularity button { border: 0; background: transparent; color: #7b8594; font-size: 11px; font-weight: 700; padding: 5px 7px; border-radius: 4px; }
+.llm-plane .granularity button:hover, .llm-plane .granularity button.active { color: #273241; background: #f8f9fb; }
+.llm-plane .date-input { color: #1d2633; background: transparent; border: 0; font: inherit; font-size: 12px; font-weight: 600; padding: 4px 6px; width: 132px; color-scheme: light; outline: none; }
+.llm-plane .date-input.with-time { width: 176px; }
 .llm-plane .filter-button, .llm-plane .icon-btn, .llm-plane .copy-button { border: 0; background: transparent; color: #5d6877; }
 .llm-plane .filter-button { border: 1px solid #e3e7ed; background: #fff; border-radius: 7px; padding: 8px 12px; display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; }
 .llm-plane .filter-button:hover, .llm-plane .icon-btn:hover { background: #f8f9fb; color: #1d2633; }
@@ -116,10 +125,23 @@ const planeCss = `
 .llm-plane .metric-card strong { display: block; font-size: 23px; letter-spacing: -.04em; font-weight: 700; color: #1d2633; }
 .llm-plane .metric-note { color: #7c8795; font-size: 11px; margin-top: 8px; }
 .llm-plane .dashboard-grid, .llm-plane .bottom-grid { display: grid; grid-template-columns: 1.7fr 1fr; gap: 13px; }
-.llm-plane .chart-panel { grid-row: span 2; }
+.llm-plane .chart-panel { grid-row: span 2; display: flex; flex-direction: column; min-height: 0; }
+.llm-plane .usage-charts { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.llm-plane .chart-slot { position: relative; flex: 1; min-height: 0; }
+.llm-plane .chart-slot .chart { position: absolute; inset: 0; width: 100%; height: 100%; }
+.llm-plane .chart-caption { margin: 14px 0 0; color: #8a94a2; font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 .llm-plane .bottom-grid { margin-top: 13px; }
 .llm-plane .panel { padding: 17px; }
 .llm-plane .panel-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.llm-plane .chart-actions { display: flex; align-items: center; gap: 8px; }
+.llm-plane .modal-actions { justify-content: flex-end; margin: 2px 0 4px; }
+.llm-plane .chart-modal { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 28px 20px; }
+.llm-plane .chart-modal-backdrop { position: absolute; inset: 0; background: rgba(29, 38, 51, .45); }
+.llm-plane .chart-modal-card { position: relative; z-index: 1; width: min(1080px, 100%); max-height: calc(100vh - 56px); overflow: auto; background: #fff; border: 1px solid #e3e7ed; border-radius: 12px; box-shadow: 0 18px 50px rgba(28, 42, 58, .2); padding: 20px 22px 18px; }
+.llm-plane .chart-modal .scatter { height: auto; padding-bottom: 22px; }
+.llm-plane .chart-modal .scatter svg { width: 100%; height: auto; }
+.llm-plane .chart-modal .axis-label, .llm-plane .chart-modal .ratio-label, .llm-plane .chart-modal .blend-label { font-size: 12px; }
+.llm-plane .data-view { margin: 12px 0 0; max-height: min(68vh, 720px); overflow: auto; background: #f8f9fb; border: 1px solid #e3e7ed; border-radius: 8px; padding: 12px; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #273241; white-space: pre; }
 .llm-plane .panel h2 { margin: 0 0 5px; font-size: 14px; font-weight: 700; color: #1d2633; letter-spacing: -.01em; }
 .llm-plane .segmented { display: flex; border: 1px solid #e3e7ed; border-radius: 6px; padding: 2px; background: #f8f9fb; }
 .llm-plane .segmented button { background: transparent; border: 0; color: #7b8594; padding: 5px 10px; border-radius: 4px; display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; }
@@ -151,6 +173,10 @@ const planeCss = `
 .llm-plane .scatter-y { top: 8px; left: 0; }
 .llm-plane .scatter-x { right: 4px; bottom: 0; }
 .llm-plane .scatter-footer { display: flex; flex-wrap: wrap; gap: 8px 13px; color: #72808f; font-size: 11px; margin-top: 8px; }
+.llm-plane .scatter-footer small { margin-left: 4px; color: #1d2633; font-weight: 700; }
+.llm-plane .ratio-label { fill: #5d6877; font-size: 8px; font-weight: 700; }
+.llm-plane .blend-label { fill: #1d2633; font-size: 8px; font-weight: 700; }
+.llm-plane .blend-line { width: 14px; height: 0; border-top: 1.5px dashed #1d2633; display: inline-block; margin-right: 6px; }
 .llm-plane .table-wrap { overflow-x: auto; margin-top: 12px; }
 .llm-plane table { width: 100%; border-collapse: collapse; min-width: 880px; }
 .llm-plane th { text-align: left; color: #8a94a2; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; font-weight: 700; padding: 8px 10px 8px 0; border-bottom: 1px solid #e3e7ed; }
@@ -158,11 +184,13 @@ const planeCss = `
 .llm-plane .model-name { display: flex; align-items: center; gap: 8px; color: #1d2633; font-weight: 600; }
 .llm-plane .share-bar { display: inline-block; width: 42px; height: 4px; border-radius: 4px; background: #e8edf2; margin-right: 7px; vertical-align: middle; }
 .llm-plane .share-bar i { display: block; height: 100%; background: #2f80ed; border-radius: 4px; }
-.llm-plane .latency-chart { padding-top: 18px; }
-.llm-plane .latency-bars { height: 120px; display: flex; align-items: flex-end; gap: 3px; border-bottom: 1px solid #e3e7ed; }
-.llm-plane .latency-bars i { flex: 1; min-height: 1px; background: linear-gradient(#7c6cf0, #d9d3f8); border-radius: 3px 3px 0 0; }
-.llm-plane .latency-labels { display: flex; justify-content: space-between; gap: 12px; padding-top: 14px; color: #8a94a2; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
-.llm-plane .latency-labels b { display: block; color: #1d2633; font-size: 16px; margin-top: 4px; letter-spacing: -.03em; text-transform: none; font-weight: 700; }
+.llm-plane .latency-summary { display: flex; align-items: flex-end; gap: 12px; margin-top: 16px; }
+.llm-plane .latency-stat { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.llm-plane .latency-track { height: 120px; width: 100%; display: flex; align-items: flex-end; justify-content: center; border-bottom: 1px solid #e3e7ed; }
+.llm-plane .latency-track i { width: min(100%, 36px); display: block; border-radius: 4px 4px 0 0; background: linear-gradient(#7c6cf0, #d9d3f8); }
+.llm-plane .latency-track i.errors { background: linear-gradient(#ef6351, #f6d2cb); }
+.llm-plane .latency-stat b { margin-top: 8px; color: #1d2633; font-size: 12px; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; }
+.llm-plane .latency-stat small { margin-top: 2px; color: #8a94a2; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .llm-plane .probe-drawer { width: 340px; flex: 0 0 340px; background: #fff; border-left: 1px solid #e3e7ed; position: sticky; top: 0; align-self: flex-start; max-height: 100vh; overflow: auto; }
 .llm-plane .probe-header { padding: 22px 18px 16px; border-bottom: 1px solid #e3e7ed; display: flex; justify-content: space-between; gap: 12px; position: sticky; top: 0; background: #fff; z-index: 1; }
 .llm-plane .probe-header h2 { margin: 0 0 5px; font-size: 16px; font-weight: 700; color: #1d2633; }
@@ -219,6 +247,7 @@ const planeCss = `
   .llm-plane .probe-button { justify-content: center; }
   .llm-plane .metric-card strong { font-size: 19px; }
   .llm-plane .donut-content { flex-direction: column; align-items: flex-start; }
+  .llm-plane .time-controls { flex-wrap: wrap; }
 }
 `
 
@@ -430,10 +459,12 @@ export default function LlmExplorer({ portfolio, org }: LlmExplorerProps) {
               <h1>LLM overview</h1>
               <p>Usage, cost, and performance for {portfolio}/{org}.</p>
             </div>
-            <button type="button" className="probe-button" aria-expanded={probeOpen} onClick={() => setProbeOpen((open) => !open)}>
-              <MessageSquare size={16} />
-              Troubleshooting probe
-            </button>
+            {probeOpen ? null : (
+              <button type="button" className="probe-button" aria-expanded={false} onClick={() => setProbeOpen(true)}>
+                <MessageSquare size={16} />
+                Troubleshooting probe
+              </button>
+            )}
           </div>
           <LlmUsage portfolio={portfolio} org={org} revision={usageRevision} />
         </div>
